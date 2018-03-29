@@ -43,7 +43,7 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 	}
 	pkgInfo := prog.InitialPackages()[0]
 	g := newGen(pkgInfo.Pkg.Path())
-	mc := newModuleCache(prog)
+	mc := newProviderSetCache(prog)
 	var directives []directive
 	for _, f := range pkgInfo.Files {
 		if !isInjectFile(f) {
@@ -60,19 +60,19 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 			for _, c := range cmap[fn] {
 				directives = extractDirectives(directives, c)
 			}
-			modules := make([]moduleRef, 0, len(directives))
+			sets := make([]providerSetRef, 0, len(directives))
 			for _, d := range directives {
 				if d.kind != "use" {
 					return nil, fmt.Errorf("%v: cannot use %s directive on inject function", prog.Fset.Position(d.pos), d.kind)
 				}
-				ref, err := parseModuleRef(d.line, fileScope, g.currPackage, d.pos)
+				ref, err := parseProviderSetRef(d.line, fileScope, g.currPackage, d.pos)
 				if err != nil {
 					return nil, fmt.Errorf("%v: %v", prog.Fset.Position(d.pos), err)
 				}
-				modules = append(modules, ref)
+				sets = append(sets, ref)
 			}
 			sig := pkgInfo.ObjectOf(fn.Name).Type().(*types.Signature)
-			if err := g.inject(mc, fn.Name.Name, sig, modules); err != nil {
+			if err := g.inject(mc, fn.Name.Name, sig, sets); err != nil {
 				return nil, fmt.Errorf("%v: %v", prog.Fset.Position(fn.Pos()), err)
 			}
 		}
@@ -128,7 +128,7 @@ func (g *gen) frame(pkgName string) []byte {
 }
 
 // inject emits the code for an injector.
-func (g *gen) inject(mc *moduleCache, name string, sig *types.Signature, modules []moduleRef) error {
+func (g *gen) inject(mc *providerSetCache, name string, sig *types.Signature, sets []providerSetRef) error {
 	results := sig.Results()
 	returnsErr := false
 	switch results.Len() {
@@ -150,7 +150,7 @@ func (g *gen) inject(mc *moduleCache, name string, sig *types.Signature, modules
 	for i := 0; i < params.Len(); i++ {
 		given[i] = params.At(i).Type()
 	}
-	calls, err := solve(mc, outType, given, modules)
+	calls, err := solve(mc, outType, given, sets)
 	if err != nil {
 		return err
 	}
@@ -244,23 +244,23 @@ func (g *gen) p(format string, args ...interface{}) {
 	fmt.Fprintf(&g.buf, format, args...)
 }
 
-// A module describes a set of providers.  The zero value is an empty
-// module.
-type module struct {
+// A providerSet describes a set of providers.  The zero value is an empty
+// providerSet.
+type providerSet struct {
 	providers []*providerInfo
-	imports   []moduleImport
+	imports   []providerSetImport
 }
 
-type moduleImport struct {
-	moduleRef
+type providerSetImport struct {
+	providerSetRef
 	pos token.Pos
 }
 
 const implicitModuleName = "Module"
 
-// findModules processes a package and extracts the modules declared in it.
-func findModules(fset *token.FileSet, pkg *types.Package, typeInfo *types.Info, files []*ast.File) (map[string]*module, error) {
-	modules := make(map[string]*module)
+// findProviderSets processes a package and extracts the provider sets declared in it.
+func findProviderSets(fset *token.FileSet, pkg *types.Package, typeInfo *types.Info, files []*ast.File) (map[string]*providerSet, error) {
+	sets := make(map[string]*providerSet)
 	var directives []directive
 	for _, f := range files {
 		fileScope := typeInfo.Scopes[f]
@@ -282,7 +282,7 @@ func findModules(fset *token.FileSet, pkg *types.Package, typeInfo *types.Info, 
 					} else {
 						name, spec = implicitModuleName, d.line
 					}
-					ref, err := parseModuleRef(spec, fileScope, pkg.Path(), d.pos)
+					ref, err := parseProviderSetRef(spec, fileScope, pkg.Path(), d.pos)
 					if err != nil {
 						return nil, fmt.Errorf("%v: %v", fset.Position(d.pos), err)
 					}
@@ -295,23 +295,23 @@ func findModules(fset *token.FileSet, pkg *types.Package, typeInfo *types.Info, 
 							}
 						}
 						if !imported {
-							return nil, fmt.Errorf("%v: module %s imports %q which is not in the package's imports", fset.Position(d.pos), name, ref.importPath)
+							return nil, fmt.Errorf("%v: provider set %s imports %q which is not in the package's imports", fset.Position(d.pos), name, ref.importPath)
 						}
 					}
-					if mod := modules[name]; mod != nil {
+					if mod := sets[name]; mod != nil {
 						found := false
 						for _, other := range mod.imports {
-							if ref == other.moduleRef {
+							if ref == other.providerSetRef {
 								found = true
 								break
 							}
 						}
 						if !found {
-							mod.imports = append(mod.imports, moduleImport{moduleRef: ref, pos: d.pos})
+							mod.imports = append(mod.imports, providerSetImport{providerSetRef: ref, pos: d.pos})
 						}
 					} else {
-						modules[name] = &module{
-							imports: []moduleImport{{moduleRef: ref, pos: d.pos}},
+						sets[name] = &providerSet{
+							imports: []providerSetImport{{providerSetRef: ref, pos: d.pos}},
 						}
 					}
 				default:
@@ -326,25 +326,25 @@ func findModules(fset *token.FileSet, pkg *types.Package, typeInfo *types.Info, 
 				directives = extractDirectives(directives, cg)
 			}
 			fn, isFunction := decl.(*ast.FuncDecl)
-			var providerModule string
+			var providerSetName string
 			for _, d := range directives {
 				if d.kind != "provide" {
 					continue
 				}
-				if providerModule != "" {
+				if providerSetName != "" {
 					return nil, fmt.Errorf("%v: multiple provide directives for %s", fset.Position(d.pos), fn.Name.Name)
 				}
 				if !isFunction {
 					return nil, fmt.Errorf("%v: only functions can be marked as providers", fset.Position(d.pos))
 				}
 				if d.line == "" {
-					providerModule = implicitModuleName
+					providerSetName = implicitModuleName
 				} else {
 					// TODO(light): validate identifier
-					providerModule = d.line
+					providerSetName = d.line
 				}
 			}
-			if providerModule == "" {
+			if providerSetName == "" {
 				continue
 			}
 			fpos := fn.Pos()
@@ -380,67 +380,67 @@ func findModules(fset *token.FileSet, pkg *types.Package, typeInfo *types.Info, 
 					}
 				}
 			}
-			if mod := modules[providerModule]; mod != nil {
+			if mod := sets[providerSetName]; mod != nil {
 				for _, other := range mod.providers {
 					if types.Identical(other.out, provider.out) {
-						return nil, fmt.Errorf("%v: module %s has multiple providers for %s (previous declaration at %v)", fset.Position(fpos), providerModule, types.TypeString(provider.out, nil), fset.Position(other.pos))
+						return nil, fmt.Errorf("%v: provider set %s has multiple providers for %s (previous declaration at %v)", fset.Position(fpos), providerSetName, types.TypeString(provider.out, nil), fset.Position(other.pos))
 					}
 				}
 				mod.providers = append(mod.providers, provider)
 			} else {
-				modules[providerModule] = &module{
+				sets[providerSetName] = &providerSet{
 					providers: []*providerInfo{provider},
 				}
 			}
 		}
 	}
-	return modules, nil
+	return sets, nil
 }
 
-// moduleCache is a lazily evaluated index of modules.
-type moduleCache struct {
-	modules map[string]map[string]*module
-	fset    *token.FileSet
-	prog    *loader.Program
+// providerSetCache is a lazily evaluated index of provider sets.
+type providerSetCache struct {
+	sets map[string]map[string]*providerSet
+	fset *token.FileSet
+	prog *loader.Program
 }
 
-func newModuleCache(prog *loader.Program) *moduleCache {
-	return &moduleCache{
+func newProviderSetCache(prog *loader.Program) *providerSetCache {
+	return &providerSetCache{
 		fset: prog.Fset,
 		prog: prog,
 	}
 }
 
-func (mc *moduleCache) get(ref moduleRef) (*module, error) {
-	if mods, cached := mc.modules[ref.importPath]; cached {
-		mod := mods[ref.moduleName]
+func (mc *providerSetCache) get(ref providerSetRef) (*providerSet, error) {
+	if mods, cached := mc.sets[ref.importPath]; cached {
+		mod := mods[ref.name]
 		if mod == nil {
-			return nil, fmt.Errorf("no such module %s in package %q", ref.moduleName, ref.importPath)
+			return nil, fmt.Errorf("no such provider set %s in package %q", ref.name, ref.importPath)
 		}
 		return mod, nil
 	}
-	if mc.modules == nil {
-		mc.modules = make(map[string]map[string]*module)
+	if mc.sets == nil {
+		mc.sets = make(map[string]map[string]*providerSet)
 	}
 	pkg, info, files, err := mc.getpkg(ref.importPath)
 	if err != nil {
-		mc.modules[ref.importPath] = nil
+		mc.sets[ref.importPath] = nil
 		return nil, fmt.Errorf("analyze package: %v", err)
 	}
-	mods, err := findModules(mc.fset, pkg, info, files)
+	mods, err := findProviderSets(mc.fset, pkg, info, files)
 	if err != nil {
-		mc.modules[ref.importPath] = nil
+		mc.sets[ref.importPath] = nil
 		return nil, err
 	}
-	mc.modules[ref.importPath] = mods
-	mod := mods[ref.moduleName]
+	mc.sets[ref.importPath] = mods
+	mod := mods[ref.name]
 	if mod == nil {
-		return nil, fmt.Errorf("no such module %s in package %q", ref.moduleName, ref.importPath)
+		return nil, fmt.Errorf("no such provider set %s in package %q", ref.name, ref.importPath)
 	}
 	return mod, nil
 }
 
-func (mc *moduleCache) getpkg(path string) (*types.Package, *types.Info, []*ast.File, error) {
+func (mc *providerSetCache) getpkg(path string) (*types.Package, *types.Info, []*ast.File, error) {
 	// TODO(light): allow other implementations for testing
 
 	pkg := mc.prog.Package(path)
@@ -452,7 +452,7 @@ func (mc *moduleCache) getpkg(path string) (*types.Package, *types.Info, []*ast.
 
 // solve finds the sequence of calls required to produce an output type
 // with an optional set of provided inputs.
-func solve(mc *moduleCache, out types.Type, given []types.Type, modules []moduleRef) ([]call, error) {
+func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []providerSetRef) ([]call, error) {
 	for i, g := range given {
 		for _, h := range given[:i] {
 			if types.Identical(g, h) {
@@ -460,7 +460,7 @@ func solve(mc *moduleCache, out types.Type, given []types.Type, modules []module
 			}
 		}
 	}
-	providers, err := buildProviderMap(mc, modules)
+	providers, err := buildProviderMap(mc, sets)
 	if err != nil {
 		return nil, err
 	}
@@ -527,18 +527,18 @@ func solve(mc *moduleCache, out types.Type, given []types.Type, modules []module
 	return calls, nil
 }
 
-func buildProviderMap(mc *moduleCache, modules []moduleRef) (*typeutil.Map, error) {
+func buildProviderMap(mc *providerSetCache, sets []providerSetRef) (*typeutil.Map, error) {
 	type nextEnt struct {
-		to moduleRef
+		to providerSetRef
 
-		from moduleRef
+		from providerSetRef
 		pos  token.Pos
 	}
 
 	pm := new(typeutil.Map) // to *providerInfo
-	visited := make(map[moduleRef]struct{})
+	visited := make(map[providerSetRef]struct{})
 	var next []nextEnt
-	for _, ref := range modules {
+	for _, ref := range sets {
 		next = append(next, nextEnt{to: ref})
 	}
 	for len(next) > 0 {
@@ -569,7 +569,7 @@ func buildProviderMap(mc *moduleCache, modules []moduleRef) (*typeutil.Map, erro
 			pm.Set(p.out, p)
 		}
 		for _, imp := range mod.imports {
-			next = append(next, nextEnt{to: imp.moduleRef, from: curr.to, pos: imp.pos})
+			next = append(next, nextEnt{to: imp.providerSetRef, from: curr.to, pos: imp.pos})
 		}
 	}
 	return pm, nil
@@ -603,40 +603,40 @@ type providerInfo struct {
 	hasErr     bool
 }
 
-// A moduleRef is a parsed reference to a collection of providers.
-type moduleRef struct {
+// A providerSetRef is a parsed reference to a collection of providers.
+type providerSetRef struct {
 	importPath string
-	moduleName string
+	name       string
 }
 
-func parseModuleRef(ref string, s *types.Scope, pkg string, pos token.Pos) (moduleRef, error) {
-	// TODO(light): verify that module name is an identifier before returning
+func parseProviderSetRef(ref string, s *types.Scope, pkg string, pos token.Pos) (providerSetRef, error) {
+	// TODO(light): verify that provider set name is an identifier before returning
 
 	i := strings.LastIndexByte(ref, '.')
 	if i == -1 {
-		return moduleRef{importPath: pkg, moduleName: ref}, nil
+		return providerSetRef{importPath: pkg, name: ref}, nil
 	}
 	imp, name := ref[:i], ref[i+1:]
 	if strings.HasPrefix(imp, `"`) {
 		path, err := strconv.Unquote(imp)
 		if err != nil {
-			return moduleRef{}, fmt.Errorf("parse module reference %q: bad import path", ref)
+			return providerSetRef{}, fmt.Errorf("parse provider set reference %q: bad import path", ref)
 		}
-		return moduleRef{importPath: path, moduleName: name}, nil
+		return providerSetRef{importPath: path, name: name}, nil
 	}
 	_, obj := s.LookupParent(imp, pos)
 	if obj == nil {
-		return moduleRef{}, fmt.Errorf("parse module reference %q: unknown identifier %s", ref, imp)
+		return providerSetRef{}, fmt.Errorf("parse provider set reference %q: unknown identifier %s", ref, imp)
 	}
 	pn, ok := obj.(*types.PkgName)
 	if !ok {
-		return moduleRef{}, fmt.Errorf("parse module reference %q: %s does not name a package", ref, imp)
+		return providerSetRef{}, fmt.Errorf("parse provider set reference %q: %s does not name a package", ref, imp)
 	}
-	return moduleRef{importPath: pn.Imported().Path(), moduleName: name}, nil
+	return providerSetRef{importPath: pn.Imported().Path(), name: name}, nil
 }
 
-func (ref moduleRef) String() string {
-	return strconv.Quote(ref.importPath) + "." + ref.moduleName
+func (ref providerSetRef) String() string {
+	return strconv.Quote(ref.importPath) + "." + ref.name
 }
 
 type directive struct {
