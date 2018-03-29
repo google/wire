@@ -25,9 +25,10 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 	// TODO(light): allow errors
 	// TODO(light): stop errors from printing to stderr
 	conf := &loader.Config{
-		Build:      new(build.Context),
-		ParserMode: parser.ParseComments,
-		Cwd:        wd,
+		Build:               new(build.Context),
+		ParserMode:          parser.ParseComments,
+		Cwd:                 wd,
+		TypeCheckFuncBodies: func(string) bool { return false },
 	}
 	*conf.Build = *bctx
 	n := len(conf.Build.BuildTags)
