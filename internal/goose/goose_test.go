@@ -44,7 +44,7 @@ func provideMessage() string { return "Hello, World!"; }
 
 package main
 
-//goose:use Module
+//goose:use provideMessage
 
 func injectedMessage() string
 `,
@@ -59,7 +59,7 @@ func injectedMessage() string
 import "fmt"
 func main() { fmt.Println(injectedMessage()); }
 
-//goose:provide
+//goose:provide Set
 
 // provideMessage provides a friendly user greeting.
 func provideMessage() string { return "Hello, World!"; }
@@ -86,17 +86,17 @@ func main() {
 type Foo int
 type FooBar int
 
-//goose:provide
+//goose:provide Set
 func provideFoo() Foo { return 41 }
 
-//goose:provide
+//goose:provide Set
 func provideFooBar(foo Foo) FooBar { return FooBar(foo) + 1 }
 `,
 			"foo/foo_goose.go": `//+build gooseinject
 
 package main
 
-//goose:use Module
+//goose:use Set
 
 func injectFooBar() FooBar
 `,
@@ -117,20 +117,20 @@ type Foo int
 type Bar int
 type FooBar int
 
-//goose:provide
+//goose:provide Set
 func provideFoo() Foo { return 40 }
 
-//goose:provide
+//goose:provide Set
 func provideBar() Bar { return 2 }
 
-//goose:provide
+//goose:provide Set
 func provideFooBar(foo Foo, bar Bar) FooBar { return FooBar(foo) + FooBar(bar) }
 `,
 			"foo/foo_goose.go": `//+build gooseinject
 
 package main
 
-//goose:use Module
+//goose:use Set
 
 func injectFooBar() FooBar
 `,
@@ -151,17 +151,17 @@ type Foo int
 type Bar int
 type FooBar int
 
-//goose:provide
+//goose:provide Set
 func provideBar() Bar { return 2 }
 
-//goose:provide
+//goose:provide Set
 func provideFooBar(foo Foo, bar Bar) FooBar { return FooBar(foo) + FooBar(bar) }
 `,
 			"foo/foo_goose.go": `//+build gooseinject
 
 package main
 
-//goose:use Module
+//goose:use Set
 
 func injectFooBar(foo Foo) FooBar
 `,
@@ -181,17 +181,17 @@ func main() {
 type Foo int
 type Bar int
 
-//goose:provide
+//goose:provide Set
 func provideFoo() Foo { return -888 }
 
-//goose:provide
+//goose:provide Set
 func provideBar(foo Foo) Bar { return 2 }
 `,
 			"foo/foo_goose.go": `//+build gooseinject
 
 package main
 
-//goose:use Module
+//goose:use Set
 
 func injectBar(foo Foo) Bar
 `,
@@ -218,14 +218,14 @@ func main() {
 
 type Foo int
 
-//goose:provide
+//goose:provide Set
 func provideFoo() (Foo, error) { return 42, errors.New("there is no Foo") }
 `,
 			"foo/foo_goose.go": `//+build gooseinject
 
 package main
 
-//goose:use Module
+//goose:use Set
 
 func injectFoo() (Foo, error)
 `,

@@ -31,7 +31,7 @@ func ProvideFoo() Foo {
 
 Providers are always part of a **provider set**: if there is no provider set
 named on the `//goose:provide` line, then the provider is added to the provider
-set with the name `Module`.
+set with the same name as the function (`ProvideFoo`, in this case).
 
 Providers can specify dependencies with parameters:
 
@@ -71,11 +71,11 @@ func ProvideBaz(ctx context.Context, bar Bar) (Baz, error) {
 }
 ```
 
-Provider sets can import other provider sets.  To add `Module` in
+Provider sets can import other provider sets.  To add the `ProvideFoo` set to
 `SuperSet`:
 
 ```go
-// goose:import SuperSet Module
+// goose:import SuperSet ProvideFoo
 ```
 
 You can also import provider sets in another package, provided that you have a

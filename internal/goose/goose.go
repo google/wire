@@ -256,8 +256,6 @@ type providerSetImport struct {
 	pos token.Pos
 }
 
-const implicitModuleName = "Module"
-
 // findProviderSets processes a package and extracts the provider sets declared in it.
 func findProviderSets(fset *token.FileSet, pkg *types.Package, typeInfo *types.Info, files []*ast.File) (map[string]*providerSet, error) {
 	sets := make(map[string]*providerSet)
@@ -274,14 +272,12 @@ func findProviderSets(fset *token.FileSet, pkg *types.Package, typeInfo *types.I
 					if fileScope == nil {
 						return nil, fmt.Errorf("%s: no scope found for file (likely a bug)", fset.File(f.Pos()).Name())
 					}
-					var name, spec string
-					if strings.HasPrefix(d.line, `"`) {
-						name, spec = implicitModuleName, d.line
-					} else if i := strings.IndexByte(d.line, ' '); i != -1 {
-						name, spec = d.line[:i], d.line[i+1:]
-					} else {
-						name, spec = implicitModuleName, d.line
+					i := strings.IndexByte(d.line, ' ')
+					// TODO(light): allow multiple imports in one line
+					if i == -1 {
+						return nil, fmt.Errorf("%s: invalid import: expected TARGET SETREF", fset.Position(d.pos))
 					}
+					name, spec := d.line[:i], d.line[i+1:]
 					ref, err := parseProviderSetRef(spec, fileScope, pkg.Path(), d.pos)
 					if err != nil {
 						return nil, fmt.Errorf("%v: %v", fset.Position(d.pos), err)
@@ -337,9 +333,8 @@ func findProviderSets(fset *token.FileSet, pkg *types.Package, typeInfo *types.I
 				if !isFunction {
 					return nil, fmt.Errorf("%v: only functions can be marked as providers", fset.Position(d.pos))
 				}
-				if d.line == "" {
-					providerSetName = implicitModuleName
-				} else {
+				providerSetName = fn.Name.Name
+				if d.line != "" {
 					// TODO(light): validate identifier
 					providerSetName = d.line
 				}
