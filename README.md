@@ -208,9 +208,6 @@ type MySQLConnectionString string
 
 ## Future Work
 
--   The names of imports and provider results in the generated code are not
-    actually as nice as shown above. I'd like to make them nicer in the
-    common cases while ensuring uniqueness.
 -   Support for map bindings.
 -   Support for multiple provider outputs.
 -   Currently, all dependency satisfaction is done using identity. I'd like to

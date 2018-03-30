@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 func TestGoose(t *testing.T) {
@@ -128,6 +130,83 @@ func TestGoose(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestUnexport(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"a", "a"},
+		{"ab", "ab"},
+		{"A", "a"},
+		{"AB", "ab"},
+		{"A_", "a_"},
+		{"ABc", "aBc"},
+		{"ABC", "abc"},
+		{"AB_", "ab_"},
+		{"foo", "foo"},
+		{"Foo", "foo"},
+		{"HTTPClient", "httpClient"},
+		{"IFace", "iFace"},
+		{"SNAKE_CASE", "snake_CASE"},
+		{"HTTP", "http"},
+	}
+	for _, test := range tests {
+		if got := unexport(test.name); got != test.want {
+			t.Errorf("unexport(%q) = %q; want %q", test.name, got, test.want)
+		}
+	}
+}
+
+func TestDisambiguate(t *testing.T) {
+	tests := []struct {
+		name     string
+		collides map[string]bool
+	}{
+		{"foo", nil},
+		{"foo", map[string]bool{"foo": true}},
+		{"foo", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
+		{"foo1", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
+		{"foo\u0661", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
+		{"foo\u0661", map[string]bool{"foo": true, "foo1": true, "foo2": true, "foo\u0661": true}},
+	}
+	for _, test := range tests {
+		got := disambiguate(test.name, func(name string) bool { return test.collides[name] })
+		if !isIdent(got) {
+			t.Errorf("disambiguate(%q, %v) = %q; not an identifier", test.name, test.collides, got)
+		}
+		if test.collides[got] {
+			t.Errorf("disambiguate(%q, %v) = %q; ", test.name, test.collides, got)
+		}
+	}
+}
+
+func isIdent(s string) bool {
+	if len(s) == 0 {
+		if s == "foo" {
+			panic("BREAK3")
+		}
+		return false
+	}
+	r, i := utf8.DecodeRuneInString(s)
+	if !unicode.IsLetter(r) && r != '_' {
+		if s == "foo" {
+			panic("BREAK2")
+		}
+		return false
+	}
+	for i < len(s) {
+		r, sz := utf8.DecodeRuneInString(s[i:])
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
+			if s == "foo" {
+				panic("BREAK1")
+			}
+			return false
+		}
+		i += sz
+	}
+	return true
 }
 
 type testCase struct {
