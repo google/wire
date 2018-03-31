@@ -228,6 +228,8 @@ the injector will pass the provider the zero value as the `foo` argument.
 
 -   Support for map bindings.
 -   Support for multiple provider outputs.
+-   Support for field binding: declare a struct as a provider and have it be
+    filled in by the corresponding bindings from the graph.
 -   Currently, all dependency satisfaction is done using identity. I'd like to
     use a limited form of assignability for interface types, but I'm unsure
     how well this implicit satisfaction will work in practice.
