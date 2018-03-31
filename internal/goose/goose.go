@@ -174,6 +174,11 @@ func (g *gen) inject(mc *providerSetCache, name string, sig *types.Signature, se
 	}
 	for _, c := range calls {
 		g.qualifyImport(c.importPath)
+		for i := range c.args {
+			if c.args[i] == -1 {
+				zeroValue(c.ins[i], g.qualifyPkg)
+			}
+		}
 	}
 	outTypeString := types.TypeString(outType, g.qualifyPkg)
 	zv := zeroValue(outType, g.qualifyPkg)
@@ -236,7 +241,9 @@ func (g *gen) inject(mc *providerSetCache, name string, sig *types.Signature, se
 			if j > 0 {
 				g.p(", ")
 			}
-			if a < params.Len() {
+			if a == -1 {
+				g.p("%s", zeroValue(c.ins[j], g.qualifyPkg))
+			} else if a < params.Len() {
 				g.p("%s", paramNames[a])
 			} else {
 				g.p("%s", localNames[a-params.Len()])

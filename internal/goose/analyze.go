@@ -14,14 +14,16 @@ type call struct {
 	importPath string
 	funcName   string
 
-	// args is a list of arguments to call the provider with.  Each element is either:
-	// a) one of the givens (args[i] < len(given)) or
-	// b) the result of a previous provider call (args[i] >= len(given)).
+	// args is a list of arguments to call the provider with.  Each element is:
+	// a) one of the givens (args[i] < len(given)),
+	// b) the result of a previous provider call (args[i] >= len(given)), or
+	// c) the zero value for the type (args[i] == -1).
 	args []int
 
+	// ins is the list of types this call receives as arguments.
+	ins []types.Type
 	// out is the type produced by this provider call.
 	out types.Type
-
 	// hasErr is true if the provider call returns an error.
 	hasErr bool
 }
@@ -56,14 +58,14 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []prov
 	// using a depth-first search. The graph may contain cycles, which
 	// should trigger an error.
 	var calls []call
-	var visit func(trail []types.Type) error
-	visit = func(trail []types.Type) error {
-		typ := trail[len(trail)-1]
+	var visit func(trail []providerInput) error
+	visit = func(trail []providerInput) error {
+		typ := trail[len(trail)-1].typ
 		if index.At(typ) != nil {
 			return nil
 		}
-		for _, t := range trail[:len(trail)-1] {
-			if types.Identical(typ, t) {
+		for _, in := range trail[:len(trail)-1] {
+			if types.Identical(typ, in.typ) {
 				// TODO(light): describe cycle
 				return fmt.Errorf("cycle for %s", types.TypeString(typ, nil))
 			}
@@ -71,11 +73,14 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []prov
 
 		p, _ := providers.At(typ).(*providerInfo)
 		if p == nil {
+			if trail[len(trail)-1].optional {
+				return nil
+			}
 			if len(trail) == 1 {
 				return fmt.Errorf("no provider found for %s (output of injector)", types.TypeString(typ, nil))
 			}
 			// TODO(light): give name of provider
-			return fmt.Errorf("no provider found for %s (required by provider of %s)", types.TypeString(typ, nil), types.TypeString(trail[len(trail)-2], nil))
+			return fmt.Errorf("no provider found for %s (required by provider of %s)", types.TypeString(typ, nil), types.TypeString(trail[len(trail)-2].typ, nil))
 		}
 		for _, a := range p.args {
 			// TODO(light): this will discard grown trail arrays.
@@ -84,20 +89,27 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []prov
 			}
 		}
 		args := make([]int, len(p.args))
+		ins := make([]types.Type, len(p.args))
 		for i := range p.args {
-			args[i] = index.At(p.args[i]).(int)
+			ins[i] = p.args[i].typ
+			if x := index.At(p.args[i].typ); x != nil {
+				args[i] = x.(int)
+			} else {
+				args[i] = -1
+			}
 		}
 		index.Set(typ, len(given)+len(calls))
 		calls = append(calls, call{
 			importPath: p.importPath,
 			funcName:   p.funcName,
 			args:       args,
+			ins:        ins,
 			out:        typ,
 			hasErr:     p.hasErr,
 		})
 		return nil
 	}
-	if err := visit([]types.Type{out}); err != nil {
+	if err := visit([]providerInput{{typ: out}}); err != nil {
 		return nil, err
 	}
 	return calls, nil

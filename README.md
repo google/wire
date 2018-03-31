@@ -206,6 +206,24 @@ through the dependency graph, you would create a wrapping type:
 type MySQLConnectionString string
 ```
 
+## Advanced Features
+
+### Optional Inputs
+
+A provider input can be marked optional using `goose:optional`:
+
+```go
+//goose:provide Bar
+//goose:optional foo
+
+func provideBar(foo Foo) Bar {
+	// ...
+}
+```
+
+If used as part of an injector that does not bring in the `Foo` dependency, then
+the injector will pass the provider the zero value as the `foo` argument.
+
 ## Future Work
 
 -   Support for map bindings.
