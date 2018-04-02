@@ -66,7 +66,7 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 			if dg.decl != decl {
 				dg = directiveGroup{}
 			}
-			var sets []providerSetRef
+			var sets []symref
 			for _, d := range dg.dirs {
 				if d.kind != "use" {
 					return nil, fmt.Errorf("%v: cannot use %s directive on inject function", prog.Fset.Position(d.pos), d.kind)
@@ -76,7 +76,7 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 					return nil, fmt.Errorf("%v: goose:use must have at least one provider set reference", prog.Fset.Position(d.pos))
 				}
 				for _, arg := range args {
-					ref, err := parseProviderSetRef(r, arg, fileScope, g.currPackage, d.pos)
+					ref, err := parseSymbolRef(r, arg, fileScope, g.currPackage, d.pos)
 					if err != nil {
 						return nil, fmt.Errorf("%v: %v", prog.Fset.Position(d.pos), err)
 					}
@@ -143,7 +143,7 @@ func (g *gen) frame() []byte {
 }
 
 // inject emits the code for an injector.
-func (g *gen) inject(mc *providerSetCache, name string, sig *types.Signature, sets []providerSetRef) error {
+func (g *gen) inject(mc *providerSetCache, name string, sig *types.Signature, sets []symref) error {
 	results := sig.Results()
 	returnsErr := false
 	switch results.Len() {

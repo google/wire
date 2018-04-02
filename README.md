@@ -208,6 +208,43 @@ type MySQLConnectionString string
 
 ## Advanced Features
 
+### Binding Interfaces
+
+Frequently, dependency injection is used to bind concrete implementations for an
+interface. goose matches inputs to outputs via [type identity][], so the
+inclination might be to create a provider that returns an interface type.
+However, this would not be idiomatic, since the Go best practice is to [return
+concrete types][]. Instead, you can declare an interface binding in a
+provider set:
+
+```go
+type Fooer interface {
+	Foo() string
+}
+
+type Bar string
+
+func (b *Bar) Foo() string {
+	return string(*b)
+}
+
+//goose:provide BarFooer
+func provideBar() *Bar {
+	b := new(Bar)
+	*b = "Hello, World!"
+	return b
+}
+
+//goose:bind BarFooer Fooer *Bar
+```
+
+The syntax is provider set name, interface type, and finally the concrete type.
+An interface binding does not necessarily need to have a provider in the same
+set that provides the concrete type.
+
+[type identity]: https://golang.org/ref/spec#Type_identity
+[return concrete types]: https://github.com/golang/go/wiki/CodeReviewComments#interfaces
+
 ### Optional Inputs
 
 A provider input can be marked optional using `goose:optional`:
@@ -230,6 +267,6 @@ the injector will pass the provider the zero value as the `foo` argument.
 -   Support for multiple provider outputs.
 -   Support for field binding: declare a struct as a provider and have it be
     filled in by the corresponding bindings from the graph.
--   Currently, all dependency satisfaction is done using identity. I'd like to
-    use a limited form of assignability for interface types, but I'm unsure
-    how well this implicit satisfaction will work in practice.
+-   Tighter validation for a provider set (cycles in unused providers goes
+    unreported currently)
+-   Visualization for provider sets
