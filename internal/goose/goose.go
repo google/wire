@@ -71,11 +71,17 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 				if d.kind != "use" {
 					return nil, fmt.Errorf("%v: cannot use %s directive on inject function", prog.Fset.Position(d.pos), d.kind)
 				}
-				ref, err := parseProviderSetRef(r, d.line, fileScope, g.currPackage, d.pos)
-				if err != nil {
-					return nil, fmt.Errorf("%v: %v", prog.Fset.Position(d.pos), err)
+				args := d.args()
+				if len(args) == 0 {
+					return nil, fmt.Errorf("%v: goose:use must have at least one provider set reference", prog.Fset.Position(d.pos))
 				}
-				sets = append(sets, ref)
+				for _, arg := range args {
+					ref, err := parseProviderSetRef(r, arg, fileScope, g.currPackage, d.pos)
+					if err != nil {
+						return nil, fmt.Errorf("%v: %v", prog.Fset.Position(d.pos), err)
+					}
+					sets = append(sets, ref)
+				}
 			}
 			sig := pkgInfo.ObjectOf(fn.Name).Type().(*types.Signature)
 			if err := g.inject(mc, fn.Name.Name, sig, sets); err != nil {

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"golang.org/x/tools/go/loader"
 )
@@ -80,42 +81,43 @@ func processUnassociatedDirective(fctx findContext, sets map[string]*providerSet
 	case "use":
 		// Ignore, picked up by injector flow.
 	case "import":
-		i := strings.IndexByte(d.line, ' ')
-		// TODO(light): allow multiple imports in one line
-		if i == -1 {
+		args := d.args()
+		if len(args) < 2 {
 			return fmt.Errorf("%s: invalid import: expected TARGET SETREF", fctx.fset.Position(d.pos))
 		}
-		name, spec := d.line[:i], d.line[i+1:]
-		ref, err := parseProviderSetRef(fctx.r, spec, scope, fctx.pkg.Path(), d.pos)
-		if err != nil {
-			return fmt.Errorf("%v: %v", fctx.fset.Position(d.pos), err)
-		}
-		if ref.importPath != fctx.pkg.Path() {
-			imported := false
-			for _, imp := range fctx.pkg.Imports() {
-				if ref.importPath == imp.Path() {
-					imported = true
-					break
+		name := args[0]
+		for _, spec := range args[1:] {
+			ref, err := parseProviderSetRef(fctx.r, spec, scope, fctx.pkg.Path(), d.pos)
+			if err != nil {
+				return fmt.Errorf("%v: %v", fctx.fset.Position(d.pos), err)
+			}
+			if ref.importPath != fctx.pkg.Path() {
+				imported := false
+				for _, imp := range fctx.pkg.Imports() {
+					if ref.importPath == imp.Path() {
+						imported = true
+						break
+					}
+				}
+				if !imported {
+					return fmt.Errorf("%v: provider set %s imports %q which is not in the package's imports", fctx.fset.Position(d.pos), name, ref.importPath)
 				}
 			}
-			if !imported {
-				return fmt.Errorf("%v: provider set %s imports %q which is not in the package's imports", fctx.fset.Position(d.pos), name, ref.importPath)
-			}
-		}
-		if mod := sets[name]; mod != nil {
-			found := false
-			for _, other := range mod.imports {
-				if ref == other.providerSetRef {
-					found = true
-					break
+			if mod := sets[name]; mod != nil {
+				found := false
+				for _, other := range mod.imports {
+					if ref == other.providerSetRef {
+						found = true
+						break
+					}
 				}
-			}
-			if !found {
-				mod.imports = append(mod.imports, providerSetImport{providerSetRef: ref, pos: d.pos})
-			}
-		} else {
-			sets[name] = &providerSet{
-				imports: []providerSetImport{{providerSetRef: ref, pos: d.pos}},
+				if !found {
+					mod.imports = append(mod.imports, providerSetImport{providerSetRef: ref, pos: d.pos})
+				}
+			} else {
+				sets[name] = &providerSet{
+					imports: []providerSetImport{{providerSetRef: ref, pos: d.pos}},
+				}
 			}
 		}
 	default:
@@ -148,7 +150,7 @@ func processDeclDirectives(fctx findContext, sets map[string]*providerSet, scope
 	for _, d := range dg.dirs {
 		if d.kind == "optional" {
 			// Marking the given argument names as optional inputs.
-			for _, arg := range strings.Fields(d.line) {
+			for _, arg := range d.args() {
 				pi := paramIndex(sig.Params(), arg)
 				if pi == -1 {
 					return fmt.Errorf("%v: %s is not a parameter of func %s", fctx.fset.Position(d.pos), arg, fn.Name.Name)
@@ -194,9 +196,11 @@ func processDeclDirectives(fctx findContext, sets map[string]*providerSet, scope
 		}
 	}
 	providerSetName := fn.Name.Name
-	if p.line != "" {
+	if args := p.args(); len(args) == 1 {
 		// TODO(light): validate identifier
-		providerSetName = p.line
+		providerSetName = args[0]
+	} else if len(args) > 1 {
+		return fmt.Errorf("%v: goose:provide takes at most one argument", fctx.fset.Position(fpos))
 	}
 	if mod := sets[providerSetName]; mod != nil {
 		for _, other := range mod.providers {
@@ -400,11 +404,9 @@ func extractDirectives(d []directive, cg *ast.CommentGroup) []directive {
 			break
 		}
 		line := text[len(prefix):]
-		if i := strings.IndexByte(line, '\n'); i != -1 {
-			line, text = line[:i], line[i+1:]
-		} else {
-			text = ""
-		}
+		// Text() is always newline terminated.
+		i := strings.IndexByte(line, '\n')
+		line, text = line[:i], line[i+1:]
 		if i := strings.IndexByte(line, ' '); i != -1 {
 			d = append(d, directive{
 				kind: line[:i],
@@ -450,6 +452,54 @@ func (dg directiveGroup) single(fset *token.FileSet, kind string) (directive, er
 
 func (d directive) isValid() bool {
 	return d.kind != ""
+}
+
+// args splits the directive line into tokens.
+func (d directive) args() []string {
+	var args []string
+	start := -1
+	state := 0 // 0 = boundary, 1 = in token, 2 = in quote, 3 = quote backslash
+	for i, r := range d.line {
+		switch state {
+		case 0:
+			// Argument boundary
+			switch {
+			case r == '"':
+				start = i
+				state = 2
+			case !unicode.IsSpace(r):
+				start = i
+				state = 1
+			}
+		case 1:
+			// In token
+			switch {
+			case unicode.IsSpace(r):
+				args = append(args, d.line[start:i])
+				start = -1
+				state = 0
+			case r == '"':
+				state = 2
+			}
+		case 2:
+			// In quotes
+			switch {
+			case r == '"':
+				state = 1
+			case r == '\\':
+				state = 3
+			}
+		case 3:
+			// Quote backslash. Consumes one character and jumps back into "in quote" state.
+			state = 2
+		default:
+			panic("unreachable")
+		}
+	}
+	if start != -1 {
+		args = append(args, d.line[start:])
+	}
+	return args
 }
 
 // isInjectFile reports whether a given file is an injection template.
