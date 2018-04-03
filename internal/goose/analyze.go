@@ -24,6 +24,8 @@ type call struct {
 	ins []types.Type
 	// out is the type produced by this provider call.
 	out types.Type
+	// hasCleanup is true if the provider call returns a cleanup function.
+	hasCleanup bool
 	// hasErr is true if the provider call returns an error.
 	hasErr bool
 }
@@ -113,6 +115,7 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 			args:       args,
 			ins:        ins,
 			out:        typ,
+			hasCleanup: p.hasCleanup,
 			hasErr:     p.hasErr,
 		})
 		return nil

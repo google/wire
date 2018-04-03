@@ -44,6 +44,7 @@ type providerInfo struct {
 	pos        token.Pos // provider function definition
 	args       []providerInput
 	out        types.Type
+	hasCleanup bool
 	hasErr     bool
 }
 
@@ -224,15 +225,27 @@ func processDeclDirectives(fctx findContext, sets map[string]*providerSet, scope
 
 	fpos := fn.Pos()
 	r := sig.Results()
-	var hasErr bool
+	var hasCleanup, hasErr bool
 	switch r.Len() {
 	case 1:
-		hasErr = false
+		hasCleanup, hasErr = false, false
 	case 2:
-		if t := r.At(1).Type(); !types.Identical(t, errorType) {
-			return fmt.Errorf("%v: wrong signature for provider %s: second return type must be error", fctx.fset.Position(fpos), fn.Name.Name)
+		switch t := r.At(1).Type(); {
+		case types.Identical(t, errorType):
+			hasCleanup, hasErr = false, true
+		case types.Identical(t, cleanupType):
+			hasCleanup, hasErr = true, false
+		default:
+			return fmt.Errorf("%v: wrong signature for provider %s: second return type must be error or func()", fctx.fset.Position(fpos), fn.Name.Name)
 		}
-		hasErr = true
+	case 3:
+		if t := r.At(1).Type(); !types.Identical(t, cleanupType) {
+			return fmt.Errorf("%v: wrong signature for provider %s: second return type must be func()", fctx.fset.Position(fpos), fn.Name.Name)
+		}
+		if t := r.At(2).Type(); !types.Identical(t, errorType) {
+			return fmt.Errorf("%v: wrong signature for provider %s: third return type must be error", fctx.fset.Position(fpos), fn.Name.Name)
+		}
+		hasCleanup, hasErr = true, true
 	default:
 		return fmt.Errorf("%v: wrong signature for provider %s: must have one return value and optional error", fctx.fset.Position(fpos), fn.Name.Name)
 	}
@@ -244,6 +257,7 @@ func processDeclDirectives(fctx findContext, sets map[string]*providerSet, scope
 		pos:        fn.Pos(),
 		args:       make([]providerInput, params.Len()),
 		out:        out,
+		hasCleanup: hasCleanup,
 		hasErr:     hasErr,
 	}
 	for i := 0; i < params.Len(); i++ {

@@ -261,6 +261,33 @@ func provideBar(foo Foo) Bar {
 If used as part of an injector that does not bring in the `Foo` dependency, then
 the injector will pass the provider the zero value as the `foo` argument.
 
+### Cleanup functions
+
+If a provider creates a value that needs to be cleaned up (e.g. closing a file),
+then it can return a closure to clean up the resource. The injector will use
+this to either return an aggregated cleanup function to the caller or to clean
+up the resource if a later provider returns an error.
+
+```go
+//goose:provide
+
+func provideFile(log Logger, path Path) (*os.File, func(), error) {
+	f, err := os.Open(string(path))
+	if err != nil {
+		return nil, nil, err
+	}
+	cleanup := func() {
+		if err := f.Close(); err != nil {
+			log.Log(err)
+		}
+	}
+	return f, cleanup, nil
+}
+```
+
+A cleanup function is guaranteed to be called before the cleanup function of any
+of the provider's inputs and must have the signature `func()`.
+
 ## Future Work
 
 -   Support for map bindings.
