@@ -44,7 +44,8 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 	}
 	pkgInfo := prog.InitialPackages()[0]
 	g := newGen(prog, pkgInfo.Pkg.Path())
-	mc := newProviderSetCache(prog)
+	r := newImportResolver(conf, prog.Fset)
+	mc := newProviderSetCache(prog, r)
 	var directives []directive
 	for _, f := range pkgInfo.Files {
 		if !isInjectFile(f) {
@@ -67,7 +68,7 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 				if d.kind != "use" {
 					return nil, fmt.Errorf("%v: cannot use %s directive on inject function", prog.Fset.Position(d.pos), d.kind)
 				}
-				ref, err := parseProviderSetRef(d.line, fileScope, g.currPackage, d.pos)
+				ref, err := parseProviderSetRef(r, d.line, fileScope, g.currPackage, d.pos)
 				if err != nil {
 					return nil, fmt.Errorf("%v: %v", prog.Fset.Position(d.pos), err)
 				}
@@ -278,7 +279,13 @@ func (g *gen) qualifyImport(path string) string {
 	if path == g.currPackage {
 		return ""
 	}
-	if name := g.imports[path]; name != "" {
+	// TODO(light): this is depending on details of the current loader.
+	const vendorPart = "vendor/"
+	unvendored := path
+	if i := strings.LastIndex(path, vendorPart); i != -1 && (i == 0 || path[i-1] == '/') {
+		unvendored = path[i+len(vendorPart):]
+	}
+	if name := g.imports[unvendored]; name != "" {
 		return name
 	}
 	// TODO(light): use parts of import path to disambiguate.
@@ -286,7 +293,7 @@ func (g *gen) qualifyImport(path string) string {
 		// Don't let an import take the "err" name. That's annoying.
 		return n == "err" || g.nameInFileScope(n)
 	})
-	g.imports[path] = name
+	g.imports[unvendored] = name
 	return name
 }
 

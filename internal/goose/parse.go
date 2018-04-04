@@ -3,8 +3,10 @@ package goose
 import (
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/token"
 	"go/types"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -34,7 +36,7 @@ type providerInfo struct {
 }
 
 // findProviderSets processes a package and extracts the provider sets declared in it.
-func findProviderSets(fset *token.FileSet, pkg *types.Package, typeInfo *types.Info, files []*ast.File) (map[string]*providerSet, error) {
+func findProviderSets(fset *token.FileSet, pkg *types.Package, r *importResolver, typeInfo *types.Info, files []*ast.File) (map[string]*providerSet, error) {
 	sets := make(map[string]*providerSet)
 	var directives []directive
 	for _, f := range files {
@@ -55,7 +57,7 @@ func findProviderSets(fset *token.FileSet, pkg *types.Package, typeInfo *types.I
 						return nil, fmt.Errorf("%s: invalid import: expected TARGET SETREF", fset.Position(d.pos))
 					}
 					name, spec := d.line[:i], d.line[i+1:]
-					ref, err := parseProviderSetRef(spec, fileScope, pkg.Path(), d.pos)
+					ref, err := parseProviderSetRef(r, spec, fileScope, pkg.Path(), d.pos)
 					if err != nil {
 						return nil, fmt.Errorf("%v: %v", fset.Position(d.pos), err)
 					}
@@ -174,12 +176,14 @@ type providerSetCache struct {
 	sets map[string]map[string]*providerSet
 	fset *token.FileSet
 	prog *loader.Program
+	r    *importResolver
 }
 
-func newProviderSetCache(prog *loader.Program) *providerSetCache {
+func newProviderSetCache(prog *loader.Program, r *importResolver) *providerSetCache {
 	return &providerSetCache{
 		fset: prog.Fset,
 		prog: prog,
+		r:    r,
 	}
 }
 
@@ -195,7 +199,7 @@ func (mc *providerSetCache) get(ref providerSetRef) (*providerSet, error) {
 		mc.sets = make(map[string]map[string]*providerSet)
 	}
 	pkg := mc.prog.Package(ref.importPath)
-	mods, err := findProviderSets(mc.fset, pkg.Pkg, &pkg.Info, pkg.Files)
+	mods, err := findProviderSets(mc.fset, pkg.Pkg, mc.r, &pkg.Info, pkg.Files)
 	if err != nil {
 		mc.sets[ref.importPath] = nil
 		return nil, err
@@ -214,7 +218,7 @@ type providerSetRef struct {
 	name       string
 }
 
-func parseProviderSetRef(ref string, s *types.Scope, pkg string, pos token.Pos) (providerSetRef, error) {
+func parseProviderSetRef(r *importResolver, ref string, s *types.Scope, pkg string, pos token.Pos) (providerSetRef, error) {
 	// TODO(light): verify that provider set name is an identifier before returning
 
 	i := strings.LastIndexByte(ref, '.')
@@ -226,6 +230,10 @@ func parseProviderSetRef(ref string, s *types.Scope, pkg string, pos token.Pos) 
 		path, err := strconv.Unquote(imp)
 		if err != nil {
 			return providerSetRef{}, fmt.Errorf("parse provider set reference %q: bad import path", ref)
+		}
+		path, err = r.resolve(pos, path)
+		if err != nil {
+			return providerSetRef{}, fmt.Errorf("parse provider set reference %q: %v", ref, err)
 		}
 		return providerSetRef{importPath: path, name: name}, nil
 	}
@@ -242,6 +250,36 @@ func parseProviderSetRef(ref string, s *types.Scope, pkg string, pos token.Pos) 
 
 func (ref providerSetRef) String() string {
 	return strconv.Quote(ref.importPath) + "." + ref.name
+}
+
+type importResolver struct {
+	fset        *token.FileSet
+	bctx        *build.Context
+	findPackage func(bctx *build.Context, importPath, fromDir string, mode build.ImportMode) (*build.Package, error)
+}
+
+func newImportResolver(c *loader.Config, fset *token.FileSet) *importResolver {
+	r := &importResolver{
+		fset:        fset,
+		bctx:        c.Build,
+		findPackage: c.FindPackage,
+	}
+	if r.bctx == nil {
+		r.bctx = &build.Default
+	}
+	if r.findPackage == nil {
+		r.findPackage = (*build.Context).Import
+	}
+	return r
+}
+
+func (r *importResolver) resolve(pos token.Pos, path string) (string, error) {
+	dir := filepath.Dir(r.fset.File(pos).Name())
+	pkg, err := r.findPackage(r.bctx, path, dir, build.FindOnly)
+	if err != nil {
+		return "", err
+	}
+	return pkg.ImportPath, nil
 }
 
 type directive struct {
