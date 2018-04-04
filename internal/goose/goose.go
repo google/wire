@@ -198,6 +198,10 @@ func (g *gen) inject(mc *providerSetCache, name string, sig *types.Signature, se
 	}
 	for _, c := range calls {
 		g.qualifyImport(c.importPath)
+		if !c.isStruct {
+			// Struct providers just omit zero-valued fields.
+			continue
+		}
 		for i := range c.args {
 			if c.args[i] == -1 {
 				zeroValue(c.ins[i], g.qualifyPkg)
@@ -274,20 +278,42 @@ func (g *gen) inject(mc *providerSetCache, name string, sig *types.Signature, se
 		if c.hasErr {
 			g.p(", %s", errVar)
 		}
-		g.p(" := %s(", g.qualifiedID(c.importPath, c.funcName))
-		for j, a := range c.args {
-			if j > 0 {
-				g.p(", ")
+		g.p(" := ")
+		if c.isStruct {
+			if _, ok := c.out.(*types.Pointer); ok {
+				g.p("&")
 			}
-			if a == -1 {
-				g.p("%s", zeroValue(c.ins[j], g.qualifyPkg))
-			} else if a < params.Len() {
-				g.p("%s", paramNames[a])
-			} else {
-				g.p("%s", localNames[a-params.Len()])
+			g.p("%s{\n", g.qualifiedID(c.importPath, c.name))
+			for j, a := range c.args {
+				if a == -1 {
+					// Omit zero value fields from composite literal.
+					continue
+				}
+				g.p("\t\t%s: ", c.fieldNames[j])
+				if a < params.Len() {
+					g.p("%s", paramNames[a])
+				} else {
+					g.p("%s", localNames[a-params.Len()])
+				}
+				g.p(",\n")
 			}
+			g.p("\t}\n")
+		} else {
+			g.p("%s(", g.qualifiedID(c.importPath, c.name))
+			for j, a := range c.args {
+				if j > 0 {
+					g.p(", ")
+				}
+				if a == -1 {
+					g.p("%s", zeroValue(c.ins[j], g.qualifyPkg))
+				} else if a < params.Len() {
+					g.p("%s", paramNames[a])
+				} else {
+					g.p("%s", localNames[a-params.Len()])
+				}
+			}
+			g.p(")\n")
 		}
-		g.p(")\n")
 		if c.hasErr {
 			g.p("\tif %s != nil {\n", errVar)
 			for j := i - 1; j >= 0; j-- {

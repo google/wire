@@ -8,17 +8,27 @@ import (
 	"golang.org/x/tools/go/types/typeutil"
 )
 
-// A call represents a step of an injector function.
+// A call represents a step of an injector function.  It may be either a
+// function call or a composite struct literal, depending on the value
+// of isStruct.
 type call struct {
-	// importPath and funcName identify the provider function to call.
+	// importPath and name identify the provider to call.
 	importPath string
-	funcName   string
+	name       string
 
 	// args is a list of arguments to call the provider with.  Each element is:
 	// a) one of the givens (args[i] < len(given)),
 	// b) the result of a previous provider call (args[i] >= len(given)), or
 	// c) the zero value for the type (args[i] == -1).
 	args []int
+
+	// isStruct indicates whether this should generate a struct composite
+	// literal instead of a function call.
+	isStruct bool
+
+	// fieldNames maps the arguments to struct field names.
+	// This will only be set if isStruct is true.
+	fieldNames []string
 
 	// ins is the list of types this call receives as arguments.
 	ins []types.Type
@@ -51,7 +61,7 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 	for i, g := range given {
 		if p := providers.At(g); p != nil {
 			pp := p.(*providerInfo)
-			return nil, fmt.Errorf("input of %s conflicts with provider %s at %s", types.TypeString(g, nil), pp.funcName, mc.fset.Position(pp.pos))
+			return nil, fmt.Errorf("input of %s conflicts with provider %s at %s", types.TypeString(g, nil), pp.name, mc.fset.Position(pp.pos))
 		}
 		index.Set(g, i)
 	}
@@ -111,8 +121,10 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 		index.Set(typ, len(given)+len(calls))
 		calls = append(calls, call{
 			importPath: p.importPath,
-			funcName:   p.funcName,
+			name:       p.name,
 			args:       args,
+			isStruct:   p.isStruct,
+			fieldNames: p.fields,
 			ins:        ins,
 			out:        typ,
 			hasCleanup: p.hasCleanup,
@@ -189,7 +201,7 @@ func buildProviderMap(mc *providerSetCache, sets []symref) (*typeutil.Map, error
 		if prev := pm.At(b.iface); prev != nil {
 			pos := mc.fset.Position(b.pos)
 			typ := types.TypeString(b.iface, nil)
-			// TODO(light): error message for conflicting with another interface binding will point at provider function instead of binding.
+			// TODO(light): error message for conflicting with another interface binding will point at provider instead of binding.
 			prevPos := mc.fset.Position(prev.(*providerInfo).pos)
 			if b.from.importPath == "" {
 				// Provider set is imported directly by injector.

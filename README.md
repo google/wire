@@ -261,6 +261,56 @@ func provideBar(foo Foo) Bar {
 If used as part of an injector that does not bring in the `Foo` dependency, then
 the injector will pass the provider the zero value as the `foo` argument.
 
+### Struct Providers
+
+Structs can also be marked as providers. Instead of calling a function, an
+injector will fill in each field using the corresponding provider. For a given
+struct type `S`, this would provide both `S` and `*S`. For example, given the
+following providers:
+
+```go
+type Foo int
+type Bar int
+
+//goose:provide Foo
+
+func provideFoo() Foo {
+	// ...
+}
+
+//goose:provide Bar
+
+func provideBar() Bar {
+	// ...
+}
+
+//goose:provide
+
+type FooBar struct {
+	Foo Foo
+	Bar Bar
+}
+```
+
+A generated injector for `FooBar` would look like this:
+
+```go
+func injectFooBar() FooBar {
+	foo := provideFoo()
+	bar := provideBar()
+	fooBar := FooBar{
+		Foo: foo,
+		Bar: bar,
+	}
+	return fooBar
+}
+```
+
+And similarly if the injector needed a `*FooBar`.
+
+Like function providers, you can mark dependencies of a struct provider optional
+by using the `goose:optional` directive with the field names.
+
 ### Cleanup functions
 
 If a provider creates a value that needs to be cleaned up (e.g. closing a file),
@@ -292,8 +342,6 @@ of the provider's inputs and must have the signature `func()`.
 
 -   Support for map bindings.
 -   Support for multiple provider outputs.
--   Support for field binding: declare a struct as a provider and have it be
-    filled in by the corresponding bindings from the graph.
 -   Tighter validation for a provider set (cycles in unused providers goes
     unreported currently)
 -   Visualization for provider sets
