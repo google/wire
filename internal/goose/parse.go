@@ -14,72 +14,158 @@ import (
 	"golang.org/x/tools/go/loader"
 )
 
-// A providerSet describes a set of providers.  The zero value is an empty
-// providerSet.
-type providerSet struct {
-	providers []*providerInfo
-	bindings  []ifaceBinding
-	imports   []providerSetImport
+// A ProviderSet describes a set of providers.  The zero value is an empty
+// ProviderSet.
+type ProviderSet struct {
+	Providers []*Provider
+	Bindings  []IfaceBinding
+	Imports   []ProviderSetImport
 }
 
-// An ifaceBinding declares that a type should be used to satisfy inputs
+// An IfaceBinding declares that a type should be used to satisfy inputs
 // of the given interface type.
-//
-// provided is always a type that is assignable to iface.
-type ifaceBinding struct {
-	// iface is the interface type, which is what can be injected.
-	iface types.Type
+type IfaceBinding struct {
+	// Iface is the interface type, which is what can be injected.
+	Iface types.Type
 
-	// provided is always a type that is assignable to Iface.
-	provided types.Type
+	// Provided is always a type that is assignable to Iface.
+	Provided types.Type
 
-	// pos is the position where the binding was declared.
-	pos token.Pos
+	// Pos is the position where the binding was declared.
+	Pos token.Pos
 }
 
-type providerSetImport struct {
-	symref
-	pos token.Pos
+// A ProviderSetImport adds providers from one provider set into another.
+type ProviderSetImport struct {
+	ProviderSetID
+	Pos token.Pos
 }
 
-// providerInfo records the signature of a provider.
-type providerInfo struct {
-	// importPath is the package path that the Go object resides in.
-	importPath string
+// Provider records the signature of a provider. A provider is a
+// single Go object, either a function or a named struct type.
+type Provider struct {
+	// ImportPath is the package path that the Go object resides in.
+	ImportPath string
 
-	// name is the name of the Go object.
-	name string
+	// Name is the name of the Go object.
+	Name string
 
-	// pos is the source position of the func keyword or type spec
+	// Pos is the source position of the func keyword or type spec
 	// defining this provider.
-	pos token.Pos
+	Pos token.Pos
 
-	// args is the list of data dependencies this provider has.
-	args []providerInput
+	// Args is the list of data dependencies this provider has.
+	Args []ProviderInput
 
-	// isStruct is true if this provider is a named struct type.
+	// IsStruct is true if this provider is a named struct type.
 	// Otherwise it's a function.
-	isStruct bool
+	IsStruct bool
 
-	// fields lists the field names to populate. This will map 1:1 with
+	// Fields lists the field names to populate. This will map 1:1 with
 	// elements in Args.
-	fields []string
+	Fields []string
 
-	// out is the type this provider produces.
-	out types.Type
+	// Out is the type this provider produces.
+	Out types.Type
 
-	// hasCleanup reports whether the provider function returns a cleanup
+	// HasCleanup reports whether the provider function returns a cleanup
 	// function.  (Always false for structs.)
-	hasCleanup bool
+	HasCleanup bool
 
-	// hasErr reports whether the provider function can return an error.
+	// HasErr reports whether the provider function can return an error.
 	// (Always false for structs.)
-	hasErr bool
+	HasErr bool
 }
 
-type providerInput struct {
-	typ      types.Type
-	optional bool
+// ProviderInput describes an incoming edge in the provider graph.
+type ProviderInput struct {
+	Type     types.Type
+	Optional bool
+}
+
+// Load finds all the provider sets in the given packages, as well as
+// the provider sets' transitive dependencies.
+func Load(bctx *build.Context, wd string, pkgs []string) (*Info, error) {
+	conf := newLoaderConfig(bctx, wd, false)
+	for _, p := range pkgs {
+		conf.Import(p)
+	}
+	prog, err := conf.Load()
+	if err != nil {
+		return nil, fmt.Errorf("load: %v", err)
+	}
+	r := newImportResolver(conf, prog.Fset)
+	var next []string
+	initial := make(map[string]struct{})
+	for _, pkgInfo := range prog.InitialPackages() {
+		path := pkgInfo.Pkg.Path()
+		next = append(next, path)
+		initial[path] = struct{}{}
+	}
+	visited := make(map[string]struct{})
+	info := &Info{
+		Fset: prog.Fset,
+		Sets: make(map[ProviderSetID]*ProviderSet),
+		All:  make(map[ProviderSetID]*ProviderSet),
+	}
+	for len(next) > 0 {
+		curr := next[len(next)-1]
+		next = next[:len(next)-1]
+		if _, ok := visited[curr]; ok {
+			continue
+		}
+		visited[curr] = struct{}{}
+		pkgInfo := prog.Package(curr)
+		sets, err := findProviderSets(findContext{
+			fset:     prog.Fset,
+			pkg:      pkgInfo.Pkg,
+			typeInfo: &pkgInfo.Info,
+			r:        r,
+		}, pkgInfo.Files)
+		if err != nil {
+			return nil, fmt.Errorf("load: %v", err)
+		}
+		path := pkgInfo.Pkg.Path()
+		for name, set := range sets {
+			info.All[ProviderSetID{path, name}] = set
+			for _, imp := range set.Imports {
+				next = append(next, imp.ImportPath)
+			}
+		}
+		if _, ok := initial[path]; ok {
+			for name, set := range sets {
+				info.Sets[ProviderSetID{path, name}] = set
+			}
+		}
+	}
+	return info, nil
+}
+
+// Info holds the result of Load.
+type Info struct {
+	Fset *token.FileSet
+
+	// Sets contains all the provider sets in the initial packages.
+	Sets map[ProviderSetID]*ProviderSet
+
+	// All contains all the provider sets transitively depended on by the
+	// initial packages' provider sets.
+	All map[ProviderSetID]*ProviderSet
+}
+
+// A ProviderSetID identifies a provider set.
+type ProviderSetID struct {
+	ImportPath string
+	Name       string
+}
+
+// String returns the ID as ""path/to/pkg".Foo".
+func (id ProviderSetID) String() string {
+	return id.symref().String()
+}
+
+func (id ProviderSetID) symref() symref {
+	return symref{importPath: id.ImportPath, name: id.Name}
 }
 
 type findContext struct {
@@ -90,8 +176,8 @@ type findContext struct {
 }
 
 // findProviderSets processes a package and extracts the provider sets declared in it.
-func findProviderSets(fctx findContext, files []*ast.File) (map[string]*providerSet, error) {
-	sets := make(map[string]*providerSet)
+func findProviderSets(fctx findContext, files []*ast.File) (map[string]*ProviderSet, error) {
+	sets := make(map[string]*ProviderSet)
 	for _, f := range files {
 		fileScope := fctx.typeInfo.Scopes[f]
 		if fileScope == nil {
@@ -115,7 +201,7 @@ func findProviderSets(fctx findContext, files []*ast.File) (map[string]*provider
 }
 
 // processUnassociatedDirective handles any directive that was not associated with a top-level declaration.
-func processUnassociatedDirective(fctx findContext, sets map[string]*providerSet, scope *types.Scope, d directive) error {
+func processUnassociatedDirective(fctx findContext, sets map[string]*ProviderSet, scope *types.Scope, d directive) error {
 	switch d.kind {
 	case "provide", "optional":
 		return fmt.Errorf("%v: only functions can be marked as providers", fctx.fset.Position(d.pos))
@@ -169,15 +255,15 @@ func processUnassociatedDirective(fctx findContext, sets map[string]*providerSet
 
 		name := args[0]
 		if pset := sets[name]; pset != nil {
-			pset.bindings = append(pset.bindings, ifaceBinding{
-				iface:    iface,
-				provided: provided,
+			pset.Bindings = append(pset.Bindings, IfaceBinding{
+				Iface:    iface,
+				Provided: provided,
 			})
 		} else {
-			sets[name] = &providerSet{
-				bindings: []ifaceBinding{{
-					iface:    iface,
-					provided: provided,
+			sets[name] = &ProviderSet{
+				Bindings: []IfaceBinding{{
+					Iface:    iface,
+					Provided: provided,
 				}},
 			}
 		}
@@ -197,18 +283,30 @@ func processUnassociatedDirective(fctx findContext, sets map[string]*providerSet
 			}
 			if mod := sets[name]; mod != nil {
 				found := false
-				for _, other := range mod.imports {
-					if ref == other.symref {
+				for _, other := range mod.Imports {
+					if ref == other.symref() {
 						found = true
 						break
 					}
 				}
 				if !found {
-					mod.imports = append(mod.imports, providerSetImport{symref: ref, pos: d.pos})
+					mod.Imports = append(mod.Imports, ProviderSetImport{
+						ProviderSetID: ProviderSetID{
+							ImportPath: ref.importPath,
+							Name:       ref.name,
+						},
+						Pos: d.pos,
+					})
 				}
 			} else {
-				sets[name] = &providerSet{
-					imports: []providerSetImport{{symref: ref, pos: d.pos}},
+				sets[name] = &ProviderSet{
+					Imports: []ProviderSetImport{{
+						ProviderSetID: ProviderSetID{
+							ImportPath: ref.importPath,
+							Name:       ref.name,
+						},
+						Pos: d.pos,
+					}},
 				}
 			}
 		}
@@ -219,7 +317,7 @@ func processUnassociatedDirective(fctx findContext, sets map[string]*providerSet
 }
 
 // processDeclDirectives processes the directives associated with a top-level declaration.
-func processDeclDirectives(fctx findContext, sets map[string]*providerSet, scope *types.Scope, dg directiveGroup) error {
+func processDeclDirectives(fctx findContext, sets map[string]*ProviderSet, scope *types.Scope, dg directiveGroup) error {
 	p, err := dg.single(fctx.fset, "provide")
 	if err != nil {
 		return err
@@ -258,15 +356,15 @@ func processDeclDirectives(fctx findContext, sets map[string]*providerSet, scope
 			providerSetName = fn.Name()
 		}
 		if mod := sets[providerSetName]; mod != nil {
-			for _, other := range mod.providers {
-				if types.Identical(other.out, provider.out) {
-					return fmt.Errorf("%v: provider set %s has multiple providers for %s (previous declaration at %v)", fctx.fset.Position(fn.Pos()), providerSetName, types.TypeString(provider.out, nil), fctx.fset.Position(other.pos))
+			for _, other := range mod.Providers {
+				if types.Identical(other.Out, provider.Out) {
+					return fmt.Errorf("%v: provider set %s has multiple providers for %s (previous declaration at %v)", fctx.fset.Position(fn.Pos()), providerSetName, types.TypeString(provider.Out, nil), fctx.fset.Position(other.Pos))
 				}
 			}
-			mod.providers = append(mod.providers, provider)
+			mod.Providers = append(mod.Providers, provider)
 		} else {
-			sets[providerSetName] = &providerSet{
-				providers: []*providerInfo{provider},
+			sets[providerSetName] = &ProviderSet{
+				Providers: []*Provider{provider},
 			}
 		}
 	case *ast.GenDecl:
@@ -288,22 +386,22 @@ func processDeclDirectives(fctx findContext, sets map[string]*providerSet, scope
 		if providerSetName == "" {
 			providerSetName = typeName.Name()
 		}
-		ptrProvider := new(providerInfo)
+		ptrProvider := new(Provider)
 		*ptrProvider = *provider
-		ptrProvider.out = types.NewPointer(provider.out)
+		ptrProvider.Out = types.NewPointer(provider.Out)
 		if mod := sets[providerSetName]; mod != nil {
-			for _, other := range mod.providers {
-				if types.Identical(other.out, provider.out) {
-					return fmt.Errorf("%v: provider set %s has multiple providers for %s (previous declaration at %v)", fctx.fset.Position(typeName.Pos()), providerSetName, types.TypeString(provider.out, nil), fctx.fset.Position(other.pos))
+			for _, other := range mod.Providers {
+				if types.Identical(other.Out, provider.Out) {
+					return fmt.Errorf("%v: provider set %s has multiple providers for %s (previous declaration at %v)", fctx.fset.Position(typeName.Pos()), providerSetName, types.TypeString(provider.Out, nil), fctx.fset.Position(other.Pos))
 				}
-				if types.Identical(other.out, ptrProvider.out) {
-					return fmt.Errorf("%v: provider set %s has multiple providers for %s (previous declaration at %v)", fctx.fset.Position(typeName.Pos()), providerSetName, types.TypeString(ptrProvider.out, nil), fctx.fset.Position(other.pos))
+				if types.Identical(other.Out, ptrProvider.Out) {
+					return fmt.Errorf("%v: provider set %s has multiple providers for %s (previous declaration at %v)", fctx.fset.Position(typeName.Pos()), providerSetName, types.TypeString(ptrProvider.Out, nil), fctx.fset.Position(other.Pos))
 				}
 			}
-			mod.providers = append(mod.providers, provider, ptrProvider)
+			mod.Providers = append(mod.Providers, provider, ptrProvider)
 		} else {
-			sets[providerSetName] = &providerSet{
-				providers: []*providerInfo{provider, ptrProvider},
+			sets[providerSetName] = &ProviderSet{
+				Providers: []*Provider{provider, ptrProvider},
 			}
 		}
 	default:
@@ -312,7 +410,7 @@ func processDeclDirectives(fctx findContext, sets map[string]*providerSet, scope
 	return nil
 }
 
-func processFuncProvider(fctx findContext, fn *types.Func, optionalArgs map[string]token.Pos) (*providerInfo, error) {
+func processFuncProvider(fctx findContext, fn *types.Func, optionalArgs map[string]token.Pos) (*Provider, error) {
 	sig := fn.Type().(*types.Signature)
 
 	optionals := make([]bool, sig.Params().Len())
@@ -352,30 +450,30 @@ func processFuncProvider(fctx findContext, fn *types.Func, optionalArgs map[stri
 	}
 	out := r.At(0).Type()
 	params := sig.Params()
-	provider := &providerInfo{
-		importPath: fctx.pkg.Path(),
-		name:       fn.Name(),
-		pos:        fn.Pos(),
-		args:       make([]providerInput, params.Len()),
-		out:        out,
-		hasCleanup: hasCleanup,
-		hasErr:     hasErr,
+	provider := &Provider{
+		ImportPath: fctx.pkg.Path(),
+		Name:       fn.Name(),
+		Pos:        fn.Pos(),
+		Args:       make([]ProviderInput, params.Len()),
+		Out:        out,
+		HasCleanup: hasCleanup,
+		HasErr:     hasErr,
 	}
 	for i := 0; i < params.Len(); i++ {
-		provider.args[i] = providerInput{
-			typ:      params.At(i).Type(),
-			optional: optionals[i],
+		provider.Args[i] = ProviderInput{
+			Type:     params.At(i).Type(),
+			Optional: optionals[i],
 		}
 		for j := 0; j < i; j++ {
-			if types.Identical(provider.args[i].typ, provider.args[j].typ) {
-				return nil, fmt.Errorf("%v: provider has multiple parameters of type %s", fctx.fset.Position(fpos), types.TypeString(provider.args[j].typ, nil))
+			if types.Identical(provider.Args[i].Type, provider.Args[j].Type) {
+				return nil, fmt.Errorf("%v: provider has multiple parameters of type %s", fctx.fset.Position(fpos), types.TypeString(provider.Args[j].Type, nil))
 			}
 		}
 	}
 	return provider, nil
 }
 
-func processStructProvider(fctx findContext, typeName *types.TypeName, optionals map[string]token.Pos) (*providerInfo, error) {
+func processStructProvider(fctx findContext, typeName *types.TypeName, optionals map[string]token.Pos) (*Provider, error) {
 	out := typeName.Type()
 	st := out.Underlying().(*types.Struct)
 	for arg, dpos := range optionals {
@@ -392,26 +490,26 @@ func processStructProvider(fctx findContext, typeName *types.TypeName, optionals
 	}
 
 	pos := typeName.Pos()
-	provider := &providerInfo{
-		importPath: fctx.pkg.Path(),
-		name:       typeName.Name(),
-		pos:        pos,
-		args:       make([]providerInput, st.NumFields()),
-		fields:     make([]string, st.NumFields()),
-		isStruct:   true,
-		out:        out,
+	provider := &Provider{
+		ImportPath: fctx.pkg.Path(),
+		Name:       typeName.Name(),
+		Pos:        pos,
+		Args:       make([]ProviderInput, st.NumFields()),
+		Fields:     make([]string, st.NumFields()),
+		IsStruct:   true,
+		Out:        out,
 	}
 	for i := 0; i < st.NumFields(); i++ {
 		f := st.Field(i)
 		_, optional := optionals[f.Name()]
-		provider.args[i] = providerInput{
-			typ:      f.Type(),
-			optional: optional,
+		provider.Args[i] = ProviderInput{
+			Type:     f.Type(),
+			Optional: optional,
 		}
-		provider.fields[i] = f.Name()
+		provider.Fields[i] = f.Name()
 		for j := 0; j < i; j++ {
-			if types.Identical(provider.args[i].typ, provider.args[j].typ) {
-				return nil, fmt.Errorf("%v: provider struct has multiple fields of type %s", fctx.fset.Position(pos), types.TypeString(provider.args[j].typ, nil))
+			if types.Identical(provider.Args[i].Type, provider.Args[j].Type) {
+				return nil, fmt.Errorf("%v: provider struct has multiple fields of type %s", fctx.fset.Position(pos), types.TypeString(provider.Args[j].Type, nil))
 			}
 		}
 	}
@@ -420,7 +518,7 @@ func processStructProvider(fctx findContext, typeName *types.TypeName, optionals
 
 // providerSetCache is a lazily evaluated index of provider sets.
 type providerSetCache struct {
-	sets map[string]map[string]*providerSet
+	sets map[string]map[string]*ProviderSet
 	fset *token.FileSet
 	prog *loader.Program
 	r    *importResolver
@@ -434,7 +532,7 @@ func newProviderSetCache(prog *loader.Program, r *importResolver) *providerSetCa
 	}
 }
 
-func (mc *providerSetCache) get(ref symref) (*providerSet, error) {
+func (mc *providerSetCache) get(ref symref) (*ProviderSet, error) {
 	if mods, cached := mc.sets[ref.importPath]; cached {
 		mod := mods[ref.name]
 		if mod == nil {
@@ -443,7 +541,7 @@ func (mc *providerSetCache) get(ref symref) (*providerSet, error) {
 		return mod, nil
 	}
 	if mc.sets == nil {
-		mc.sets = make(map[string]map[string]*providerSet)
+		mc.sets = make(map[string]map[string]*ProviderSet)
 	}
 	pkg := mc.prog.Package(ref.importPath)
 	mods, err := findProviderSets(findContext{

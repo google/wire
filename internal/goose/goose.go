@@ -22,17 +22,7 @@ import (
 // Generate performs dependency injection for a single package,
 // returning the gofmt'd Go source code.
 func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
-	// TODO(light): allow errors
-	// TODO(light): stop errors from printing to stderr
-	conf := &loader.Config{
-		Build:               new(build.Context),
-		ParserMode:          parser.ParseComments,
-		Cwd:                 wd,
-		TypeCheckFuncBodies: func(string) bool { return false },
-	}
-	*conf.Build = *bctx
-	n := len(conf.Build.BuildTags)
-	conf.Build.BuildTags = append(conf.Build.BuildTags[:n:n], "gooseinject")
+	conf := newLoaderConfig(bctx, wd, true)
 	conf.Import(pkg)
 	prog, err := conf.Load()
 	if err != nil {
@@ -97,6 +87,24 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 		return goSrc, err
 	}
 	return fmtSrc, nil
+}
+
+func newLoaderConfig(bctx *build.Context, wd string, inject bool) *loader.Config {
+	// TODO(light): allow errors
+	// TODO(light): stop errors from printing to stderr
+	conf := &loader.Config{
+		Build:               bctx,
+		ParserMode:          parser.ParseComments,
+		Cwd:                 wd,
+		TypeCheckFuncBodies: func(string) bool { return false },
+	}
+	if inject {
+		conf.Build = new(build.Context)
+		*conf.Build = *bctx
+		n := len(conf.Build.BuildTags)
+		conf.Build.BuildTags = append(conf.Build.BuildTags[:n:n], "gooseinject")
+	}
+	return conf
 }
 
 // gen is the generator state.

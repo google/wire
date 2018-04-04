@@ -60,8 +60,8 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 	index := new(typeutil.Map)
 	for i, g := range given {
 		if p := providers.At(g); p != nil {
-			pp := p.(*providerInfo)
-			return nil, fmt.Errorf("input of %s conflicts with provider %s at %s", types.TypeString(g, nil), pp.name, mc.fset.Position(pp.pos))
+			pp := p.(*Provider)
+			return nil, fmt.Errorf("input of %s conflicts with provider %s at %s", types.TypeString(g, nil), pp.Name, mc.fset.Position(pp.Pos))
 		}
 		index.Set(g, i)
 	}
@@ -70,49 +70,49 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 	// using a depth-first search. The graph may contain cycles, which
 	// should trigger an error.
 	var calls []call
-	var visit func(trail []providerInput) error
-	visit = func(trail []providerInput) error {
-		typ := trail[len(trail)-1].typ
+	var visit func(trail []ProviderInput) error
+	visit = func(trail []ProviderInput) error {
+		typ := trail[len(trail)-1].Type
 		if index.At(typ) != nil {
 			return nil
 		}
 		for _, in := range trail[:len(trail)-1] {
-			if types.Identical(typ, in.typ) {
+			if types.Identical(typ, in.Type) {
 				// TODO(light): describe cycle
 				return fmt.Errorf("cycle for %s", types.TypeString(typ, nil))
 			}
 		}
 
-		p, _ := providers.At(typ).(*providerInfo)
+		p, _ := providers.At(typ).(*Provider)
 		if p == nil {
-			if trail[len(trail)-1].optional {
+			if trail[len(trail)-1].Optional {
 				return nil
 			}
 			if len(trail) == 1 {
 				return fmt.Errorf("no provider found for %s (output of injector)", types.TypeString(typ, nil))
 			}
 			// TODO(light): give name of provider
-			return fmt.Errorf("no provider found for %s (required by provider of %s)", types.TypeString(typ, nil), types.TypeString(trail[len(trail)-2].typ, nil))
+			return fmt.Errorf("no provider found for %s (required by provider of %s)", types.TypeString(typ, nil), types.TypeString(trail[len(trail)-2].Type, nil))
 		}
-		if !types.Identical(p.out, typ) {
+		if !types.Identical(p.Out, typ) {
 			// Interface binding.  Don't create a call ourselves.
-			if err := visit(append(trail, providerInput{typ: p.out})); err != nil {
+			if err := visit(append(trail, ProviderInput{Type: p.Out})); err != nil {
 				return err
 			}
-			index.Set(typ, index.At(p.out))
+			index.Set(typ, index.At(p.Out))
 			return nil
 		}
-		for _, a := range p.args {
+		for _, a := range p.Args {
 			// TODO(light): this will discard grown trail arrays.
 			if err := visit(append(trail, a)); err != nil {
 				return err
 			}
 		}
-		args := make([]int, len(p.args))
-		ins := make([]types.Type, len(p.args))
-		for i := range p.args {
-			ins[i] = p.args[i].typ
-			if x := index.At(p.args[i].typ); x != nil {
+		args := make([]int, len(p.Args))
+		ins := make([]types.Type, len(p.Args))
+		for i := range p.Args {
+			ins[i] = p.Args[i].Type
+			if x := index.At(p.Args[i].Type); x != nil {
 				args[i] = x.(int)
 			} else {
 				args[i] = -1
@@ -120,19 +120,19 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 		}
 		index.Set(typ, len(given)+len(calls))
 		calls = append(calls, call{
-			importPath: p.importPath,
-			name:       p.name,
+			importPath: p.ImportPath,
+			name:       p.Name,
 			args:       args,
-			isStruct:   p.isStruct,
-			fieldNames: p.fields,
+			isStruct:   p.IsStruct,
+			fieldNames: p.Fields,
 			ins:        ins,
 			out:        typ,
-			hasCleanup: p.hasCleanup,
-			hasErr:     p.hasErr,
+			hasCleanup: p.HasCleanup,
+			hasErr:     p.HasErr,
 		})
 		return nil
 	}
-	if err := visit([]providerInput{{typ: out}}); err != nil {
+	if err := visit([]ProviderInput{{Type: out}}); err != nil {
 		return nil, err
 	}
 	return calls, nil
@@ -146,7 +146,7 @@ func buildProviderMap(mc *providerSetCache, sets []symref) (*typeutil.Map, error
 		pos  token.Pos
 	}
 	type binding struct {
-		ifaceBinding
+		IfaceBinding
 		pset symref
 		from symref
 	}
@@ -173,53 +173,53 @@ func buildProviderMap(mc *providerSetCache, sets []symref) (*typeutil.Map, error
 			}
 			return nil, fmt.Errorf("%v: %v", mc.fset.Position(curr.pos), err)
 		}
-		for _, p := range pset.providers {
-			if prev := pm.At(p.out); prev != nil {
-				pos := mc.fset.Position(p.pos)
-				typ := types.TypeString(p.out, nil)
-				prevPos := mc.fset.Position(prev.(*providerInfo).pos)
+		for _, p := range pset.Providers {
+			if prev := pm.At(p.Out); prev != nil {
+				pos := mc.fset.Position(p.Pos)
+				typ := types.TypeString(p.Out, nil)
+				prevPos := mc.fset.Position(prev.(*Provider).Pos)
 				if curr.from.importPath == "" {
 					// Provider set is imported directly by injector.
 					return nil, fmt.Errorf("%v: multiple bindings for %s (added by injector, previous binding at %v)", pos, typ, prevPos)
 				}
 				return nil, fmt.Errorf("%v: multiple bindings for %s (imported by %v, previous binding at %v)", pos, typ, curr.from, prevPos)
 			}
-			pm.Set(p.out, p)
+			pm.Set(p.Out, p)
 		}
-		for _, b := range pset.bindings {
+		for _, b := range pset.Bindings {
 			bindings = append(bindings, binding{
-				ifaceBinding: b,
+				IfaceBinding: b,
 				pset:         curr.to,
 				from:         curr.from,
 			})
 		}
-		for _, imp := range pset.imports {
-			next = append(next, nextEnt{to: imp.symref, from: curr.to, pos: imp.pos})
+		for _, imp := range pset.Imports {
+			next = append(next, nextEnt{to: imp.symref(), from: curr.to, pos: imp.Pos})
 		}
 	}
 	for _, b := range bindings {
-		if prev := pm.At(b.iface); prev != nil {
-			pos := mc.fset.Position(b.pos)
-			typ := types.TypeString(b.iface, nil)
+		if prev := pm.At(b.Iface); prev != nil {
+			pos := mc.fset.Position(b.Pos)
+			typ := types.TypeString(b.Iface, nil)
 			// TODO(light): error message for conflicting with another interface binding will point at provider instead of binding.
-			prevPos := mc.fset.Position(prev.(*providerInfo).pos)
+			prevPos := mc.fset.Position(prev.(*Provider).Pos)
 			if b.from.importPath == "" {
 				// Provider set is imported directly by injector.
 				return nil, fmt.Errorf("%v: multiple bindings for %s (added by injector, previous binding at %v)", pos, typ, prevPos)
 			}
 			return nil, fmt.Errorf("%v: multiple bindings for %s (imported by %v, previous binding at %v)", pos, typ, b.from, prevPos)
 		}
-		concrete := pm.At(b.provided)
+		concrete := pm.At(b.Provided)
 		if concrete == nil {
-			pos := mc.fset.Position(b.pos)
-			typ := types.TypeString(b.provided, nil)
+			pos := mc.fset.Position(b.Pos)
+			typ := types.TypeString(b.Provided, nil)
 			if b.from.importPath == "" {
 				// Concrete provider is imported directly by injector.
 				return nil, fmt.Errorf("%v: no binding for %s", pos, typ)
 			}
 			return nil, fmt.Errorf("%v: no binding for %s (imported by %v)", pos, typ, b.from)
 		}
-		pm.Set(b.iface, concrete)
+		pm.Set(b.Iface, concrete)
 	}
 	return pm, nil
 }
