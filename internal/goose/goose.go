@@ -46,25 +46,28 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 	g := newGen(prog, pkgInfo.Pkg.Path())
 	r := newImportResolver(conf, prog.Fset)
 	mc := newProviderSetCache(prog, r)
-	var directives []directive
 	for _, f := range pkgInfo.Files {
 		if !isInjectFile(f) {
 			continue
 		}
-		// TODO(light): use same directive extraction logic as provider set finding.
 		fileScope := pkgInfo.Scopes[f]
-		cmap := ast.NewCommentMap(prog.Fset, f, f.Comments)
+		groups := parseFile(prog.Fset, f)
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok {
 				continue
 			}
-			directives = directives[:0]
-			for _, c := range cmap[fn] {
-				directives = extractDirectives(directives, c)
+			var dg directiveGroup
+			for _, dg = range groups {
+				if dg.decl == decl {
+					break
+				}
 			}
-			sets := make([]providerSetRef, 0, len(directives))
-			for _, d := range directives {
+			if dg.decl != decl {
+				dg = directiveGroup{}
+			}
+			var sets []providerSetRef
+			for _, d := range dg.dirs {
 				if d.kind != "use" {
 					return nil, fmt.Errorf("%v: cannot use %s directive on inject function", prog.Fset.Position(d.pos), d.kind)
 				}
