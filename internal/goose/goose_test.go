@@ -297,9 +297,9 @@ const (
 func magicGOPATH() string {
 	if runtime.GOOS == "windows" {
 		return magicGOPATHWindows
-	} else {
-		return magicGOPATHUnix
 	}
+
+	return magicGOPATHUnix
 }
 
 func (test *testCase) hasSubdir(root, dir string) (rel string, ok bool) {
