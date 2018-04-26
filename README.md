@@ -245,22 +245,6 @@ set that provides the concrete type.
 [type identity]: https://golang.org/ref/spec#Type_identity
 [return concrete types]: https://github.com/golang/go/wiki/CodeReviewComments#interfaces
 
-### Optional Inputs
-
-A provider input can be marked optional using `goose:optional`:
-
-```go
-//goose:provide Bar
-//goose:optional foo
-
-func provideBar(foo Foo) Bar {
-	// ...
-}
-```
-
-If used as part of an injector that does not bring in the `Foo` dependency, then
-the injector will pass the provider the zero value as the `foo` argument.
-
 ### Struct Providers
 
 Structs can also be marked as providers. Instead of calling a function, an
@@ -307,9 +291,6 @@ func injectFooBar() FooBar {
 ```
 
 And similarly if the injector needed a `*FooBar`.
-
-Like function providers, you can mark dependencies of a struct provider optional
-by using the `goose:optional` directive with the field names.
 
 ### Cleanup functions
 

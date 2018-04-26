@@ -79,8 +79,9 @@ type Provider struct {
 
 // ProviderInput describes an incoming edge in the provider graph.
 type ProviderInput struct {
-	Type     types.Type
-	Optional bool
+	Type types.Type
+
+	// TODO(light): Move field name into this struct.
 }
 
 // Load finds all the provider sets in the given packages, as well as
@@ -203,7 +204,7 @@ func findProviderSets(fctx findContext, files []*ast.File) (map[string]*Provider
 // processUnassociatedDirective handles any directive that was not associated with a top-level declaration.
 func processUnassociatedDirective(fctx findContext, sets map[string]*ProviderSet, scope *types.Scope, d directive) error {
 	switch d.kind {
-	case "provide", "optional":
+	case "provide":
 		return fmt.Errorf("%v: only functions can be marked as providers", fctx.fset.Position(d.pos))
 	case "use":
 		// Ignore, picked up by injector flow.
@@ -323,11 +324,6 @@ func processDeclDirectives(fctx findContext, sets map[string]*ProviderSet, scope
 		return err
 	}
 	if !p.isValid() {
-		for _, d := range dg.dirs {
-			if d.kind == "optional" {
-				return fmt.Errorf("%v: cannot use goose:%s directive on non-provider", fctx.fset.Position(d.pos), d.kind)
-			}
-		}
 		return nil
 	}
 	var providerSetName string
@@ -337,18 +333,10 @@ func processDeclDirectives(fctx findContext, sets map[string]*ProviderSet, scope
 	} else if len(args) > 1 {
 		return fmt.Errorf("%v: goose:provide takes at most one argument", fctx.fset.Position(p.pos))
 	}
-	optionals := make(map[string]token.Pos)
-	for _, d := range dg.dirs {
-		if d.kind == "optional" {
-			for _, arg := range d.args() {
-				optionals[arg] = d.pos
-			}
-		}
-	}
 	switch decl := dg.decl.(type) {
 	case *ast.FuncDecl:
 		fn := fctx.typeInfo.ObjectOf(decl.Name).(*types.Func)
-		provider, err := processFuncProvider(fctx, fn, optionals)
+		provider, err := processFuncProvider(fctx, fn)
 		if err != nil {
 			return err
 		}
@@ -379,7 +367,7 @@ func processDeclDirectives(fctx findContext, sets map[string]*ProviderSet, scope
 		if _, ok := typeName.Type().(*types.Named).Underlying().(*types.Struct); !ok {
 			return fmt.Errorf("%v: only functions and structs can be marked as providers", fctx.fset.Position(p.pos))
 		}
-		provider, err := processStructProvider(fctx, typeName, optionals)
+		provider, err := processStructProvider(fctx, typeName)
 		if err != nil {
 			return err
 		}
@@ -410,17 +398,8 @@ func processDeclDirectives(fctx findContext, sets map[string]*ProviderSet, scope
 	return nil
 }
 
-func processFuncProvider(fctx findContext, fn *types.Func, optionalArgs map[string]token.Pos) (*Provider, error) {
+func processFuncProvider(fctx findContext, fn *types.Func) (*Provider, error) {
 	sig := fn.Type().(*types.Signature)
-
-	optionals := make([]bool, sig.Params().Len())
-	for arg, dpos := range optionalArgs {
-		pi := paramIndex(sig.Params(), arg)
-		if pi == -1 {
-			return nil, fmt.Errorf("%v: %s is not a parameter of func %s", fctx.fset.Position(dpos), arg, fn.Name())
-		}
-		optionals[pi] = true
-	}
 
 	fpos := fn.Pos()
 	r := sig.Results()
@@ -461,8 +440,7 @@ func processFuncProvider(fctx findContext, fn *types.Func, optionalArgs map[stri
 	}
 	for i := 0; i < params.Len(); i++ {
 		provider.Args[i] = ProviderInput{
-			Type:     params.At(i).Type(),
-			Optional: optionals[i],
+			Type: params.At(i).Type(),
 		}
 		for j := 0; j < i; j++ {
 			if types.Identical(provider.Args[i].Type, provider.Args[j].Type) {
@@ -473,21 +451,9 @@ func processFuncProvider(fctx findContext, fn *types.Func, optionalArgs map[stri
 	return provider, nil
 }
 
-func processStructProvider(fctx findContext, typeName *types.TypeName, optionals map[string]token.Pos) (*Provider, error) {
+func processStructProvider(fctx findContext, typeName *types.TypeName) (*Provider, error) {
 	out := typeName.Type()
 	st := out.Underlying().(*types.Struct)
-	for arg, dpos := range optionals {
-		found := false
-		for i := 0; i < st.NumFields(); i++ {
-			if st.Field(i).Name() == arg {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, fmt.Errorf("%v: %s is not a field of struct %s", fctx.fset.Position(dpos), arg, types.TypeString(st, nil))
-		}
-	}
 
 	pos := typeName.Pos()
 	provider := &Provider{
@@ -501,10 +467,8 @@ func processStructProvider(fctx findContext, typeName *types.TypeName, optionals
 	}
 	for i := 0; i < st.NumFields(); i++ {
 		f := st.Field(i)
-		_, optional := optionals[f.Name()]
 		provider.Args[i] = ProviderInput{
-			Type:     f.Type(),
-			Optional: optional,
+			Type: f.Type(),
 		}
 		provider.Fields[i] = f.Name()
 		for j := 0; j < i; j++ {
@@ -688,7 +652,7 @@ func parseFile(fset *token.FileSet, f *ast.File) []directiveGroup {
 					// Move directives that don't associate into the unassociated group.
 					n := 0
 					for i := start; i < len(grp.dirs); i++ {
-						if k := grp.dirs[i].kind; k == "provide" || k == "optional" || k == "use" {
+						if k := grp.dirs[i].kind; k == "provide" || k == "use" {
 							grp.dirs[start+n] = grp.dirs[i]
 							n++
 						} else {

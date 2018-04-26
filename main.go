@@ -198,9 +198,6 @@ func gather(info *goose.Info, key goose.ProviderSetID) (_ []outGroup, imports ma
 				// Try to see if any args haven't been visited.
 				allPresent := true
 				for _, arg := range p.Args {
-					if arg.Optional {
-						continue
-					}
 					if inputVisited.At(arg.Type) == nil {
 						allPresent = false
 					}
@@ -208,9 +205,6 @@ func gather(info *goose.Info, key goose.ProviderSetID) (_ []outGroup, imports ma
 				if !allPresent {
 					stk = append(stk, curr)
 					for _, arg := range p.Args {
-						if arg.Optional {
-							continue
-						}
 						if inputVisited.At(arg.Type) == nil {
 							stk = append(stk, arg.Type)
 						}
@@ -222,9 +216,6 @@ func gather(info *goose.Info, key goose.ProviderSetID) (_ []outGroup, imports ma
 				in := new(typeutil.Map)
 				in.SetHasher(hash)
 				for _, arg := range p.Args {
-					if arg.Optional {
-						continue
-					}
 					i := inputVisited.At(arg.Type).(int)
 					if i == -1 {
 						in.Set(arg.Type, true)

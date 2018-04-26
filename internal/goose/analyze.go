@@ -85,9 +85,6 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 
 		p, _ := providers.At(typ).(*Provider)
 		if p == nil {
-			if trail[len(trail)-1].Optional {
-				return nil
-			}
 			if len(trail) == 1 {
 				return fmt.Errorf("no provider found for %s (output of injector)", types.TypeString(typ, nil))
 			}
