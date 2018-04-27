@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func main() {
 	bar, cleanup := injectBar()
@@ -12,14 +14,12 @@ func main() {
 type Foo int
 type Bar int
 
-//goose:provide Foo
 func provideFoo() (*Foo, func()) {
 	foo := new(Foo)
 	*foo = 42
 	return foo, func() { *foo = 0 }
 }
 
-//goose:provide Bar
 func provideBar(foo *Foo) (*Bar, func()) {
 	bar := new(Bar)
 	*bar = 77

@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"codename/goose"
+)
 
 func main() {
 	fmt.Println(injectFooBar())
@@ -9,12 +13,14 @@ func main() {
 type Foo int
 type FooBar int
 
-//goose:provide Set
+var Set = goose.NewSet(
+	provideFoo,
+	provideFooBar)
+
 func provideFoo() Foo {
 	return 41
 }
 
-//goose:provide Set
 func provideFooBar(foo Foo) FooBar {
 	return FooBar(foo) + 1
 }

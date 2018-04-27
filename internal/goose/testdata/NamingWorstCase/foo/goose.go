@@ -4,8 +4,10 @@ package main
 
 import (
 	stdcontext "context"
+
+	"codename/goose"
 )
 
-//goose:use provide
-
-func inject(context stdcontext.Context, err struct{}) (context, error)
+func inject(context stdcontext.Context, err struct{}) (context, error) {
+	panic(goose.Use(provide))
+}

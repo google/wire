@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"codename/goose/internal/goose"
@@ -71,9 +72,9 @@ func generate(pkg string) error {
 
 // show runs the show subcommand.
 //
-// Given one or more packages, show will find all the declared provider
-// sets and print what other provider sets it imports and what outputs
-// it can produce, given possible inputs.
+// Given one or more packages, show will find all the provider sets
+// declared as top-level variables and print what other provider sets it
+// imports and what outputs it can produce, given possible inputs.
 func show(pkgs ...string) error {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -89,11 +90,12 @@ func show(pkgs ...string) error {
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].ImportPath == keys[j].ImportPath {
-			return keys[i].Name < keys[j].Name
+			return keys[i].VarName < keys[j].VarName
 		}
 		return keys[i].ImportPath < keys[j].ImportPath
 	})
 	// ANSI color codes.
+	// TODO(light): Possibly use github.com/fatih/color?
 	const (
 		reset   = "\x1b[0m"
 		redBold = "\x1b[0;1;31m"
@@ -116,7 +118,7 @@ func show(pkgs ...string) error {
 				switch v := v.(type) {
 				case *goose.Provider:
 					out[types.TypeString(t, nil)] = v.Pos
-				case goose.IfaceBinding:
+				case *goose.IfaceBinding:
 					out[types.TypeString(t, nil)] = v.Pos
 				default:
 					panic("unreachable")
@@ -134,19 +136,19 @@ func show(pkgs ...string) error {
 type outGroup struct {
 	name    string
 	inputs  *typeutil.Map // values are not important
-	outputs *typeutil.Map // values are either *goose.Provider or goose.IfaceBinding
+	outputs *typeutil.Map // values are either *goose.Provider or *goose.IfaceBinding
 }
 
 // gather flattens a provider set into outputs grouped by the inputs
 // required to create them. As it flattens the provider set, it records
-// the visited provider sets as imports.
+// the visited named provider sets as imports.
 func gather(info *goose.Info, key goose.ProviderSetID) (_ []outGroup, imports map[string]struct{}) {
 	hash := typeutil.MakeHasher()
 	// Map types to providers and bindings.
 	pm := new(typeutil.Map)
 	pm.SetHasher(hash)
-	next := []goose.ProviderSetID{key}
-	visited := make(map[goose.ProviderSetID]struct{})
+	next := []*goose.ProviderSet{info.Sets[key]}
+	visited := make(map[*goose.ProviderSet]struct{})
 	imports = make(map[string]struct{})
 	for len(next) > 0 {
 		curr := next[len(next)-1]
@@ -155,18 +157,17 @@ func gather(info *goose.Info, key goose.ProviderSetID) (_ []outGroup, imports ma
 			continue
 		}
 		visited[curr] = struct{}{}
-		if curr != key {
-			imports[curr.String()] = struct{}{}
+		if curr.Name != "" && !(curr.PkgPath == key.ImportPath && curr.Name == key.VarName) {
+			imports[formatProviderSetName(curr.PkgPath, curr.Name)] = struct{}{}
 		}
-		set := info.All[curr]
-		for _, p := range set.Providers {
+		for _, p := range curr.Providers {
 			pm.Set(p.Out, p)
 		}
-		for _, b := range set.Bindings {
+		for _, b := range curr.Bindings {
 			pm.Set(b.Iface, b)
 		}
-		for _, imp := range set.Imports {
-			next = append(next, imp.ProviderSetID)
+		for _, imp := range curr.Imports {
+			next = append(next, imp)
 		}
 	}
 
@@ -238,7 +239,7 @@ func gather(info *goose.Info, key goose.ProviderSetID) (_ []outGroup, imports ma
 					inputs:  in,
 					outputs: out,
 				})
-			case goose.IfaceBinding:
+			case *goose.IfaceBinding:
 				i, ok := inputVisited.At(p.Provided).(int)
 				if !ok {
 					stk = append(stk, curr, p.Provided)
@@ -326,4 +327,9 @@ func sortSet(set interface{}) []string {
 	}
 	sort.Strings(a)
 	return a
+}
+
+func formatProviderSetName(importPath, varName string) string {
+	// Since varName is an identifier, it doesn't make sense to quote.
+	return strconv.Quote(importPath) + "." + varName
 }

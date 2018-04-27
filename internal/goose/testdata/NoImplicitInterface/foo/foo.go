@@ -16,7 +16,6 @@ func (b Bar) Foo() string {
 	return string(b)
 }
 
-//goose:provide
 func provideBar() Bar {
 	return "Hello, World!"
 }

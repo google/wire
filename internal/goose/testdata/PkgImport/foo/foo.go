@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"bar"
+	"codename/goose"
 )
 
 func main() {
@@ -13,14 +14,15 @@ func main() {
 type Foo int
 type FooBar int
 
-//goose:provide Set
+var Set = goose.NewSet(
+	provideFoo,
+	bar.ProvideBar,
+	provideFooBar)
+
 func provideFoo() Foo {
 	return 41
 }
 
-//goose:import Set "bar".Bar
-
-//goose:provide Set
 func provideFooBar(foo Foo, barVal bar.Bar) FooBar {
 	return FooBar(foo) + FooBar(barVal)
 }

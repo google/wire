@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"codename/goose"
+)
 
 func main() {
 	fb := injectFooBar()
@@ -10,18 +14,20 @@ func main() {
 type Foo int
 type Bar int
 
-//goose:provide Set
 type FooBar struct {
 	Foo Foo
 	Bar Bar
 }
 
-//goose:provide Set
 func provideFoo() Foo {
 	return 41
 }
 
-//goose:provide Set
 func provideBar() Bar {
 	return 1
 }
+
+var Set = goose.NewSet(
+	FooBar{},
+	provideFoo,
+	provideBar)

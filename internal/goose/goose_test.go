@@ -29,13 +29,19 @@ func TestGoose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The marker function package source is needed to have the test cases
+	// type check. loadTestCase places this file at the well-known import path.
+	gooseGo, err := ioutil.ReadFile(filepath.Join("..", "..", "goose.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := make([]*testCase, 0, len(testdataEnts))
 	for _, ent := range testdataEnts {
 		name := ent.Name()
 		if !ent.IsDir() || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
 			continue
 		}
-		test, err := loadTestCase(filepath.Join(testRoot, name))
+		test, err := loadTestCase(filepath.Join(testRoot, name), gooseGo)
 		if err != nil {
 			t.Error(err)
 		}
@@ -227,7 +233,7 @@ type testCase struct {
 //		out.txt    file containing the expected output, or the magic string "ERROR"
 //		           if this test should cause generation to fail
 //		...        any Go files found recursively placed under GOPATH/src/...
-func loadTestCase(root string) (*testCase, error) {
+func loadTestCase(root string, gooseGoSrc []byte) (*testCase, error) {
 	name := filepath.Base(root)
 	pkg, err := ioutil.ReadFile(filepath.Join(root, "pkg"))
 	if err != nil {
@@ -242,7 +248,9 @@ func loadTestCase(root string) (*testCase, error) {
 		wantError = true
 		out = nil
 	}
-	goFiles := make(map[string][]byte)
+	goFiles := map[string][]byte{
+		"codename/goose/goose.go": gooseGoSrc,
+	}
 	err = filepath.Walk(root, func(src string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err

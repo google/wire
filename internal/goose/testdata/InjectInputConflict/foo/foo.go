@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"codename/goose"
+)
 
 func main() {
 	// I'm on the fence as to whether this should be an error (versus an
@@ -12,12 +16,14 @@ func main() {
 type Foo int
 type Bar int
 
-//goose:provide Set
+var Set = goose.NewSet(
+	provideFoo,
+	provideBar)
+
 func provideFoo() Foo {
 	return -888
 }
 
-//goose:provide Set
 func provideBar(foo Foo) Bar {
 	return 2
 }

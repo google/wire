@@ -1,8 +1,12 @@
 package main
 
-import "errors"
-import "fmt"
-import "strings"
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	"codename/goose"
+)
 
 func main() {
 	foo, err := injectFoo()
@@ -16,7 +20,8 @@ func main() {
 
 type Foo int
 
-//goose:provide Set
 func provideFoo() (Foo, error) {
 	return 42, errors.New("there is no Foo")
 }
+
+var Set = goose.NewSet(provideFoo)

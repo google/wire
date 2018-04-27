@@ -3,9 +3,10 @@
 package main
 
 import (
-	_ "bar"
+	"bar"
+	"codename/goose"
 )
 
-//goose:use "bar".Message
-
-func injectedMessage() string
+func injectedMessage() string {
+	panic(goose.Use(bar.ProvideMessage))
+}

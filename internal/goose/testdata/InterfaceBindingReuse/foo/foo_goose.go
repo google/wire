@@ -2,7 +2,13 @@
 
 package main
 
-//goose:use provideBar
-//goose:use provideFooBar
+import (
+	"codename/goose"
+)
 
-func injectFooBar() FooBar
+func injectFooBar() FooBar {
+	panic(goose.Use(
+		provideBar,
+		provideFooBar,
+		goose.Bind(Fooer(nil), (*Bar)(nil))))
+}

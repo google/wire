@@ -2,6 +2,10 @@
 
 package main
 
-//goose:use Set
+import (
+	"codename/goose"
+)
 
-func injectFooBar(foo Foo) FooBar
+func injectFooBar(foo Foo) FooBar {
+	panic(goose.Use(Set))
+}

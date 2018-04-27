@@ -13,15 +13,12 @@ might have hand-written.
 ### Defining Providers
 
 The primary mechanism in goose is the **provider**: a function that can
-produce a value, annotated with the special `goose:provide` directive. These
-functions are otherwise ordinary Go code.
+produce a value. These functions are ordinary Go code.
 
 ```go
 package foobarbaz
 
 type Foo int
-
-// goose:provide
 
 // ProvideFoo returns a Foo.
 func ProvideFoo() Foo {
@@ -29,18 +26,14 @@ func ProvideFoo() Foo {
 }
 ```
 
-Providers are always part of a **provider set**: if there is no provider set
-named on the `//goose:provide` line, then the provider is added to the provider
-set with the same name as the function (`ProvideFoo`, in this case).
-
 Providers can specify dependencies with parameters:
 
 ```go
 package foobarbaz
 
-type Bar int
+// ...
 
-// goose:provide SuperSet
+type Bar int
 
 // ProvideBar returns a Bar: a negative Foo.
 func ProvideBar(foo Foo) Bar {
@@ -58,9 +51,9 @@ import (
 	"errors"
 )
 
-type Baz int
+// ...
 
-// goose:provide SuperSet
+type Baz int
 
 // ProvideBaz returns a value if Bar is not zero.
 func ProvideBaz(ctx context.Context, bar Bar) (Baz, error) {
@@ -71,23 +64,36 @@ func ProvideBaz(ctx context.Context, bar Bar) (Baz, error) {
 }
 ```
 
-Provider sets can import other provider sets.  To add the `ProvideFoo` set to
-`SuperSet`:
+Providers can be grouped in **provider sets**.  To add these providers to a new
+set called `SuperSet`, use the `goose.NewSet` function:
 
 ```go
-// goose:import SuperSet ProvideFoo
+package foobarbaz
+
+import (
+	// ...
+	"codename/goose"
+)
+
+// ...
+
+var SuperSet = goose.NewSet(ProvideFoo, ProvideBar, ProvideBaz)
 ```
 
-You can also import provider sets in another package, provided that you have a
-Go import for the package:
+You can also add other provider sets into a provider set.
 
 ```go
-// goose:import SuperSet "example.com/some/other/pkg".OtherSet
-```
+package foobarbaz
 
-A provider set reference is an optional import qualifier (either a package name
-or a quoted import path, as seen above) ending with a dot, followed by the
-provider set name.
+import (
+	// ...
+	"example.com/some/other/pkg"
+)
+
+// ...
+
+var MegaSet = goose.NewSet(SuperSet, pkg.OtherSet)
+```
 
 ### Injectors
 
@@ -95,32 +101,34 @@ An application wires up these providers with an **injector**: a function that
 calls providers in dependency order. With goose, you write the injector's
 signature, then goose generates the function's body.
 
-An injector is declared by writing a function declaration without a body in a
-file guarded by a `gooseinject` build tag. Let's say that the above providers
-were defined in a package called `example.com/foobarbaz`. The following would
-declare an injector to obtain a `Baz`:
+An injector is declared by writing a function declaration whose body is a call
+to `panic()` with a call to `goose.Use` as its argument. Let's say that the
+above providers were defined in a package called `example.com/foobarbaz`. The
+following would declare an injector to obtain a `Baz`:
 
 ```go
-//+build gooseinject
+// +build gooseinject
+
+// ^ build tag makes sure the stub is not built in the final build
 
 package main
 
 import (
 	"context"
 
+	"codename/goose"
 	"example.com/foobarbaz"
 )
 
-// goose:use foobarbaz.SuperSet
-
-func initializeApp(ctx context.Context) (foobarbaz.Baz, error)
+func initializeApp(ctx context.Context) (foobarbaz.Baz, error) {
+	panic(goose.Use(foobarbaz.MegaSet))
+}
 ```
 
 Like providers, injectors can be parameterized on inputs (which then get sent to
-providers) and can return errors. Each `goose:use` directive specifies a
-provider set to use in the injection. An injector can have one or more
-`goose:use` directives. `goose:use` directives use the same syntax as
-`goose:import` to reference provider sets.
+providers) and can return errors. Arguments to `goose.Use` are the same as
+`goose.NewSet`: they form a provider set. This is the provider set that gets
+used during code generation for that injector.
 
 You can generate the injector by invoking goose in the package directory:
 
@@ -164,7 +172,7 @@ func initializeApp(ctx context.Context) (foobarbaz.Baz, error) {
 ```
 
 As you can see, the output is very close to what a developer would write
-themselves. Further, there is no dependency on goose at runtime: all of the
+themselves. Further, there is little dependency on goose at runtime: all of the
 written code is just normal Go code, and can be used without goose.
 
 [`go generate`]: https://blog.golang.org/generate
@@ -228,19 +236,21 @@ func (b *Bar) Foo() string {
 	return string(*b)
 }
 
-//goose:provide BarFooer
-func provideBar() *Bar {
+func ProvideBar() *Bar {
 	b := new(Bar)
 	*b = "Hello, World!"
 	return b
 }
 
-//goose:bind BarFooer Fooer *Bar
+var BarFooer = goose.NewSet(
+	ProvideBar,
+	goose.Bind(Fooer(nil), (*Bar)(nil)))
 ```
 
-The syntax is provider set name, interface type, and finally the concrete type.
-An interface binding does not necessarily need to have a provider in the same
-set that provides the concrete type.
+The first argument to `goose.Bind` is a nil value for the interface type and the
+second argument is a zero value of the concrete type. An interface binding does
+not necessarily need to have a provider in the same set that provides the
+concrete type.
 
 [type identity]: https://golang.org/ref/spec#Type_identity
 [return concrete types]: https://github.com/golang/go/wiki/CodeReviewComments#interfaces
@@ -256,32 +266,31 @@ following providers:
 type Foo int
 type Bar int
 
-//goose:provide Foo
-
-func provideFoo() Foo {
+func ProvideFoo() Foo {
 	// ...
 }
 
-//goose:provide Bar
-
-func provideBar() Bar {
+func ProvideBar() Bar {
 	// ...
 }
-
-//goose:provide
 
 type FooBar struct {
 	Foo Foo
 	Bar Bar
 }
+
+var Set = goose.NewSet(
+	ProvideFoo,
+	ProvideBar,
+	FooBar{})
 ```
 
 A generated injector for `FooBar` would look like this:
 
 ```go
 func injectFooBar() FooBar {
-	foo := provideFoo()
-	bar := provideBar()
+	foo := ProvideFoo()
+	bar := ProvideBar()
 	fooBar := FooBar{
 		Foo: foo,
 		Bar: bar,
@@ -300,8 +309,6 @@ this to either return an aggregated cleanup function to the caller or to clean
 up the resource if a later provider returns an error.
 
 ```go
-//goose:provide
-
 func provideFile(log Logger, path Path) (*os.File, func(), error) {
 	f, err := os.Open(string(path))
 	if err != nil {

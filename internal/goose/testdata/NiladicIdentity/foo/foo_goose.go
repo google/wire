@@ -2,6 +2,10 @@
 
 package main
 
-//goose:use provideMessage
+import (
+	"codename/goose"
+)
 
-func injectedMessage() string
+func injectedMessage() string {
+	panic(goose.Use(provideMessage))
+}

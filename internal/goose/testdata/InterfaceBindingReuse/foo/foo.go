@@ -28,8 +28,6 @@ func (b *Bar) Foo() string {
 	return string(*b)
 }
 
-//goose:provide
-//goose:bind provideBar Fooer *Bar
 func provideBar() *Bar {
 	mu.Lock()
 	provideBarCalls++
@@ -44,7 +42,6 @@ var (
 	provideBarCalls int
 )
 
-//goose:provide
 func provideFooBar(fooer Fooer, bar *Bar) FooBar {
 	return FooBar{fooer, bar}
 }

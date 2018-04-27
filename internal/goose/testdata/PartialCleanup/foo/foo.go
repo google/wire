@@ -25,14 +25,12 @@ type Foo int
 type Bar int
 type Baz int
 
-//goose:provide Foo
 func provideFoo() (*Foo, func()) {
 	foo := new(Foo)
 	*foo = 42
 	return foo, func() { *foo = 0; cleanedFoo = true }
 }
 
-//goose:provide Bar
 func provideBar(foo *Foo) (*Bar, func(), error) {
 	bar := new(Bar)
 	*bar = 77
@@ -45,7 +43,6 @@ func provideBar(foo *Foo) (*Bar, func(), error) {
 	}, nil
 }
 
-//goose:provide Baz
 func provideBaz(bar *Bar) (Baz, error) {
 	return 0, errors.New("bork!")
 }

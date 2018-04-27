@@ -17,8 +17,6 @@ func main() {
 	fmt.Println(c)
 }
 
-//goose:provide
-
 func provide(ctx stdcontext.Context) (context, error) {
 	return context{}, nil
 }

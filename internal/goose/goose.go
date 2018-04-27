@@ -8,7 +8,7 @@ import (
 	"go/ast"
 	"go/build"
 	"go/format"
-	"go/parser"
+	"go/token"
 	"go/types"
 	"sort"
 	"strconv"
@@ -22,8 +22,24 @@ import (
 // Generate performs dependency injection for a single package,
 // returning the gofmt'd Go source code.
 func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
-	conf := newLoaderConfig(bctx, wd, true)
+	mainPkg, err := bctx.Import(pkg, wd, build.FindOnly)
+	if err != nil {
+		return nil, fmt.Errorf("load: %v", err)
+	}
+	// TODO(light): Stop errors from printing to stderr.
+	conf := &loader.Config{
+		Build: new(build.Context),
+		Cwd:   wd,
+		TypeCheckFuncBodies: func(path string) bool {
+			return path == mainPkg.ImportPath
+		},
+	}
+	*conf.Build = *bctx
+	n := len(conf.Build.BuildTags)
+	// TODO(light): Only apply gooseinject build tag on main package.
+	conf.Build.BuildTags = append(conf.Build.BuildTags[:n:n], "gooseinject")
 	conf.Import(pkg)
+
 	prog, err := conf.Load()
 	if err != nil {
 		return nil, fmt.Errorf("load: %v", err)
@@ -34,47 +50,23 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 	}
 	pkgInfo := prog.InitialPackages()[0]
 	g := newGen(prog, pkgInfo.Pkg.Path())
-	r := newImportResolver(conf, prog.Fset)
-	mc := newProviderSetCache(prog, r)
+	oc := newObjectCache(prog)
 	for _, f := range pkgInfo.Files {
-		if !isInjectFile(f) {
-			continue
-		}
-		fileScope := pkgInfo.Scopes[f]
-		groups := parseFile(prog.Fset, f)
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok {
 				continue
 			}
-			var dg directiveGroup
-			for _, dg = range groups {
-				if dg.decl == decl {
-					break
-				}
+			useCall := isInjector(&pkgInfo.Info, fn)
+			if useCall == nil {
+				continue
 			}
-			if dg.decl != decl {
-				dg = directiveGroup{}
-			}
-			var sets []symref
-			for _, d := range dg.dirs {
-				if d.kind != "use" {
-					return nil, fmt.Errorf("%v: cannot use %s directive on inject function", prog.Fset.Position(d.pos), d.kind)
-				}
-				args := d.args()
-				if len(args) == 0 {
-					return nil, fmt.Errorf("%v: goose:use must have at least one provider set reference", prog.Fset.Position(d.pos))
-				}
-				for _, arg := range args {
-					ref, err := parseSymbolRef(r, arg, fileScope, g.currPackage, d.pos)
-					if err != nil {
-						return nil, fmt.Errorf("%v: %v", prog.Fset.Position(d.pos), err)
-					}
-					sets = append(sets, ref)
-				}
+			set, err := oc.processNewSet(pkgInfo, useCall)
+			if err != nil {
+				return nil, fmt.Errorf("%v: %v", prog.Fset.Position(fn.Pos()), err)
 			}
 			sig := pkgInfo.ObjectOf(fn.Name).Type().(*types.Signature)
-			if err := g.inject(mc, fn.Name.Name, sig, sets); err != nil {
+			if err := g.inject(prog.Fset, fn.Name.Name, sig, set); err != nil {
 				return nil, fmt.Errorf("%v: %v", prog.Fset.Position(fn.Pos()), err)
 			}
 		}
@@ -87,23 +79,6 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 		return goSrc, err
 	}
 	return fmtSrc, nil
-}
-
-func newLoaderConfig(bctx *build.Context, wd string, inject bool) *loader.Config {
-	// TODO(light): Stop errors from printing to stderr.
-	conf := &loader.Config{
-		Build:               bctx,
-		ParserMode:          parser.ParseComments,
-		Cwd:                 wd,
-		TypeCheckFuncBodies: func(string) bool { return false },
-	}
-	if inject {
-		conf.Build = new(build.Context)
-		*conf.Build = *bctx
-		n := len(conf.Build.BuildTags)
-		conf.Build.BuildTags = append(conf.Build.BuildTags[:n:n], "gooseinject")
-	}
-	return conf
 }
 
 // gen is the generator state.
@@ -150,7 +125,7 @@ func (g *gen) frame() []byte {
 }
 
 // inject emits the code for an injector.
-func (g *gen) inject(mc *providerSetCache, name string, sig *types.Signature, sets []symref) error {
+func (g *gen) inject(fset *token.FileSet, name string, sig *types.Signature, set *ProviderSet) error {
 	results := sig.Results()
 	var returnsCleanup, returnsErr bool
 	switch results.Len() {
@@ -184,7 +159,7 @@ func (g *gen) inject(mc *providerSetCache, name string, sig *types.Signature, se
 	for i := 0; i < params.Len(); i++ {
 		given[i] = params.At(i).Type()
 	}
-	calls, err := solve(mc, outType, given, sets)
+	calls, err := solve(fset, outType, given, set)
 	if err != nil {
 		return err
 	}

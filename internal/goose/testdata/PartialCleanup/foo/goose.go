@@ -2,8 +2,10 @@
 
 package main
 
-//goose:use Foo
-//goose:use Bar
-//goose:use Baz
+import (
+	"codename/goose"
+)
 
-func injectBaz() (Baz, func(), error)
+func injectBaz() (Baz, func(), error) {
+	panic(goose.Use(provideFoo, provideBar, provideBaz))
+}

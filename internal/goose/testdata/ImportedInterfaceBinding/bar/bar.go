@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 
-	_ "foo"
+	"codename/goose"
+	"foo"
 )
 
 func main() {
@@ -16,11 +17,12 @@ func (b *Bar) Foo() string {
 	return string(*b)
 }
 
-//goose:provide
 func provideBar() *Bar {
 	b := new(Bar)
 	*b = "Hello, World!"
 	return b
 }
 
-//goose:bind provideBar "foo".Fooer *Bar
+var Set = goose.NewSet(
+	provideBar,
+	goose.Bind(foo.Fooer(nil), (*Bar)(nil)))

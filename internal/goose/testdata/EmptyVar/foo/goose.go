@@ -6,6 +6,6 @@ import (
 	"codename/goose"
 )
 
-func injectFoo() (Foo, error) {
-	panic(goose.Use(Set))
+func injectedMessage() string {
+	panic(goose.Use(myFakeSet))
 }

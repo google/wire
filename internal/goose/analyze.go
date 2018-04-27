@@ -42,7 +42,7 @@ type call struct {
 
 // solve finds the sequence of calls required to produce an output type
 // with an optional set of provided inputs.
-func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symref) ([]call, error) {
+func solve(fset *token.FileSet, out types.Type, given []types.Type, set *ProviderSet) ([]call, error) {
 	for i, g := range given {
 		for _, h := range given[:i] {
 			if types.Identical(g, h) {
@@ -50,7 +50,7 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 			}
 		}
 	}
-	providers, err := buildProviderMap(mc, sets)
+	providers, err := buildProviderMap(fset, set)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 	for i, g := range given {
 		if p := providers.At(g); p != nil {
 			pp := p.(*Provider)
-			return nil, fmt.Errorf("input of %s conflicts with provider %s at %s", types.TypeString(g, nil), pp.Name, mc.fset.Position(pp.Pos))
+			return nil, fmt.Errorf("input of %s conflicts with provider %s at %s", types.TypeString(g, nil), pp.Name, fset.Position(pp.Pos))
 		}
 		index.Set(g, i)
 	}
@@ -135,88 +135,70 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 	return calls, nil
 }
 
-func buildProviderMap(mc *providerSetCache, sets []symref) (*typeutil.Map, error) {
-	type nextEnt struct {
-		to symref
-
-		from symref
-		pos  token.Pos
-	}
+func buildProviderMap(fset *token.FileSet, set *ProviderSet) (*typeutil.Map, error) {
 	type binding struct {
-		IfaceBinding
-		pset symref
-		from symref
+		*IfaceBinding
+		set *ProviderSet
 	}
 
-	pm := new(typeutil.Map) // to *providerInfo
+	providerMap := new(typeutil.Map) // to *Provider
+	setMap := new(typeutil.Map)      // to *ProviderSet, for error messages
 	var bindings []binding
-	visited := make(map[symref]struct{})
-	var next []nextEnt
-	for _, ref := range sets {
-		next = append(next, nextEnt{to: ref})
-	}
+	visited := make(map[*ProviderSet]struct{})
+	next := []*ProviderSet{set}
 	for len(next) > 0 {
 		curr := next[0]
 		copy(next, next[1:])
 		next = next[:len(next)-1]
-		if _, skip := visited[curr.to]; skip {
+		if _, skip := visited[curr]; skip {
 			continue
 		}
-		visited[curr.to] = struct{}{}
-		pset, err := mc.get(curr.to)
-		if err != nil {
-			if !curr.pos.IsValid() {
-				return nil, err
+		visited[curr] = struct{}{}
+		for _, p := range curr.Providers {
+			if providerMap.At(p.Out) != nil {
+				return nil, bindingConflictError(fset, p.Pos, p.Out, setMap.At(p.Out).(*ProviderSet))
 			}
-			return nil, fmt.Errorf("%v: %v", mc.fset.Position(curr.pos), err)
+			providerMap.Set(p.Out, p)
+			setMap.Set(p.Out, curr)
 		}
-		for _, p := range pset.Providers {
-			if prev := pm.At(p.Out); prev != nil {
-				pos := mc.fset.Position(p.Pos)
-				typ := types.TypeString(p.Out, nil)
-				prevPos := mc.fset.Position(prev.(*Provider).Pos)
-				if curr.from.importPath == "" {
-					// Provider set is imported directly by injector.
-					return nil, fmt.Errorf("%v: multiple bindings for %s (added by injector, previous binding at %v)", pos, typ, prevPos)
-				}
-				return nil, fmt.Errorf("%v: multiple bindings for %s (imported by %v, previous binding at %v)", pos, typ, curr.from, prevPos)
-			}
-			pm.Set(p.Out, p)
-		}
-		for _, b := range pset.Bindings {
+		for _, b := range curr.Bindings {
 			bindings = append(bindings, binding{
 				IfaceBinding: b,
-				pset:         curr.to,
-				from:         curr.from,
+				set:          curr,
 			})
 		}
-		for _, imp := range pset.Imports {
-			next = append(next, nextEnt{to: imp.symref(), from: curr.to, pos: imp.Pos})
+		for _, imp := range curr.Imports {
+			next = append(next, imp)
 		}
 	}
+	// Validate that bindings have their concrete type provided in the set.
+	// TODO(light): Move this validation up into provider set creation.
 	for _, b := range bindings {
-		if prev := pm.At(b.Iface); prev != nil {
-			pos := mc.fset.Position(b.Pos)
-			typ := types.TypeString(b.Iface, nil)
-			// TODO(light): Error message for conflicting with another interface binding will point at provider instead of binding.
-			prevPos := mc.fset.Position(prev.(*Provider).Pos)
-			if b.from.importPath == "" {
-				// Provider set is imported directly by injector.
-				return nil, fmt.Errorf("%v: multiple bindings for %s (added by injector, previous binding at %v)", pos, typ, prevPos)
-			}
-			return nil, fmt.Errorf("%v: multiple bindings for %s (imported by %v, previous binding at %v)", pos, typ, b.from, prevPos)
+		if providerMap.At(b.Iface) != nil {
+			return nil, bindingConflictError(fset, b.Pos, b.Iface, setMap.At(b.Iface).(*ProviderSet))
 		}
-		concrete := pm.At(b.Provided)
+		concrete := providerMap.At(b.Provided)
 		if concrete == nil {
-			pos := mc.fset.Position(b.Pos)
+			pos := fset.Position(b.Pos)
 			typ := types.TypeString(b.Provided, nil)
-			if b.from.importPath == "" {
-				// Concrete provider is imported directly by injector.
-				return nil, fmt.Errorf("%v: no binding for %s", pos, typ)
-			}
-			return nil, fmt.Errorf("%v: no binding for %s (imported by %v)", pos, typ, b.from)
+			return nil, fmt.Errorf("%v: no binding for %s", pos, typ)
 		}
-		pm.Set(b.Iface, concrete)
+		providerMap.Set(b.Iface, concrete)
+		setMap.Set(b.Iface, b.set)
 	}
-	return pm, nil
+	return providerMap, nil
+}
+
+// bindingConflictError creates a new error describing multiple bindings
+// for the same output type.
+func bindingConflictError(fset *token.FileSet, pos token.Pos, typ types.Type, prevSet *ProviderSet) error {
+	position := fset.Position(pos)
+	typString := types.TypeString(typ, nil)
+	if prevSet.Name == "" {
+		prevPosition := fset.Position(prevSet.Pos)
+		return fmt.Errorf("%v: multiple bindings for %s (previous binding at %v)",
+			position, typString, prevPosition)
+	}
+	return fmt.Errorf("%v: multiple bindings for %s (previous binding in %q.%s)",
+		position, typString, prevSet.PkgPath, prevSet.Name)
 }

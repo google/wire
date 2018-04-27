@@ -2,7 +2,10 @@
 
 package main
 
-//goose:use Foo
-//goose:use Bar
+import (
+	"codename/goose"
+)
 
-func injectBar() (*Bar, func())
+func injectBar() (*Bar, func()) {
+	panic(goose.Use(provideFoo, provideBar))
+}
