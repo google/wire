@@ -90,8 +90,7 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 }
 
 func newLoaderConfig(bctx *build.Context, wd string, inject bool) *loader.Config {
-	// TODO(light): allow errors
-	// TODO(light): stop errors from printing to stderr
+	// TODO(light): Stop errors from printing to stderr.
 	conf := &loader.Config{
 		Build:               bctx,
 		ParserMode:          parser.ParseComments,
@@ -218,7 +217,7 @@ func (g *gen) inject(mc *providerSetCache, name string, sig *types.Signature, se
 	}
 	outTypeString := types.TypeString(outType, g.qualifyPkg)
 	zv := zeroValue(outType, g.qualifyPkg)
-	// Set up local variables
+	// Set up local variables.
 	paramNames := make([]string, params.Len())
 	localNames := make([]string, len(calls))
 	cleanupNames := make([]string, len(calls))
@@ -333,7 +332,7 @@ func (g *gen) inject(mc *providerSetCache, name string, sig *types.Signature, se
 			if returnsCleanup {
 				g.p(", nil")
 			}
-			// TODO(light): give information about failing provider
+			// TODO(light): Give information about failing provider.
 			g.p(", err\n")
 			g.p("\t}\n")
 		}
@@ -376,7 +375,7 @@ func (g *gen) qualifyImport(path string) string {
 	if path == g.currPackage {
 		return ""
 	}
-	// TODO(light): this is depending on details of the current loader.
+	// TODO(light): This is depending on details of the current loader.
 	const vendorPart = "vendor/"
 	unvendored := path
 	if i := strings.LastIndex(path, vendorPart); i != -1 && (i == 0 || path[i-1] == '/') {
@@ -385,7 +384,7 @@ func (g *gen) qualifyImport(path string) string {
 	if name := g.imports[unvendored]; name != "" {
 		return name
 	}
-	// TODO(light): use parts of import path to disambiguate.
+	// TODO(light): Use parts of import path to disambiguate.
 	name := disambiguate(g.prog.Package(path).Pkg.Name(), func(n string) bool {
 		// Don't let an import take the "err" name. That's annoying.
 		return n == "err" || g.nameInFileScope(n)
@@ -447,7 +446,7 @@ func typeVariableName(t types.Type) string {
 	if !ok {
 		return ""
 	}
-	// TODO(light): include package name when appropriate
+	// TODO(light): Include package name when appropriate.
 	return unexport(tn.Obj().Name())
 }
 

@@ -25,7 +25,7 @@ func TestGoose(t *testing.T) {
 		t.Fatal(err)
 	}
 	const testRoot = "testdata"
-	testdataEnts, err := ioutil.ReadDir(testRoot) // ReadDir sorts by name
+	testdataEnts, err := ioutil.ReadDir(testRoot) // ReadDir sorts by name.
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -473,7 +473,7 @@ func runGo(bctx *build.Context, args ...string) error {
 	} else {
 		c.Env = append(c.Env, "CGO_ENABLED=0")
 	}
-	// TODO(someday): set -compiler flag if needed.
+	// TODO(someday): Set -compiler flag if needed.
 	out, err := c.CombinedOutput()
 	if err != nil {
 		if len(out) > 0 {

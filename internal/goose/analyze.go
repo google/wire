@@ -78,7 +78,7 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 		}
 		for _, in := range trail[:len(trail)-1] {
 			if types.Identical(typ, in.Type) {
-				// TODO(light): describe cycle
+				// TODO(light): Describe cycle.
 				return fmt.Errorf("cycle for %s", types.TypeString(typ, nil))
 			}
 		}
@@ -88,7 +88,7 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 			if len(trail) == 1 {
 				return fmt.Errorf("no provider found for %s (output of injector)", types.TypeString(typ, nil))
 			}
-			// TODO(light): give name of provider
+			// TODO(light): Give name of provider.
 			return fmt.Errorf("no provider found for %s (required by provider of %s)", types.TypeString(typ, nil), types.TypeString(trail[len(trail)-2].Type, nil))
 		}
 		if !types.Identical(p.Out, typ) {
@@ -100,7 +100,7 @@ func solve(mc *providerSetCache, out types.Type, given []types.Type, sets []symr
 			return nil
 		}
 		for _, a := range p.Args {
-			// TODO(light): this will discard grown trail arrays.
+			// TODO(light): This will discard grown trail arrays.
 			if err := visit(append(trail, a)); err != nil {
 				return err
 			}
@@ -198,7 +198,7 @@ func buildProviderMap(mc *providerSetCache, sets []symref) (*typeutil.Map, error
 		if prev := pm.At(b.Iface); prev != nil {
 			pos := mc.fset.Position(b.Pos)
 			typ := types.TypeString(b.Iface, nil)
-			// TODO(light): error message for conflicting with another interface binding will point at provider instead of binding.
+			// TODO(light): Error message for conflicting with another interface binding will point at provider instead of binding.
 			prevPos := mc.fset.Position(prev.(*Provider).Pos)
 			if b.from.importPath == "" {
 				// Provider set is imported directly by injector.

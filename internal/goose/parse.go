@@ -328,7 +328,7 @@ func processDeclDirectives(fctx findContext, sets map[string]*ProviderSet, scope
 	}
 	var providerSetName string
 	if args := p.args(); len(args) == 1 {
-		// TODO(light): validate identifier
+		// TODO(light): Validate identifier.
 		providerSetName = args[0]
 	} else if len(args) > 1 {
 		return fmt.Errorf("%v: goose:provide takes at most one argument", fctx.fset.Position(p.pos))
@@ -360,7 +360,7 @@ func processDeclDirectives(fctx findContext, sets map[string]*ProviderSet, scope
 			return fmt.Errorf("%v: only functions and structs can be marked as providers", fctx.fset.Position(p.pos))
 		}
 		if len(decl.Specs) != 1 {
-			// TODO(light): tighten directive extraction to associate with particular specs.
+			// TODO(light): Tighten directive extraction to associate with particular specs.
 			return fmt.Errorf("%v: only functions and structs can be marked as providers", fctx.fset.Position(p.pos))
 		}
 		typeName := fctx.typeInfo.ObjectOf(decl.Specs[0].(*ast.TypeSpec).Name).(*types.TypeName)
@@ -533,7 +533,7 @@ type symref struct {
 }
 
 func parseSymbolRef(r *importResolver, ref string, s *types.Scope, pkg string, pos token.Pos) (symref, error) {
-	// TODO(light): verify that provider set name is an identifier before returning
+	// TODO(light): Verify that provider set name is an identifier before returning.
 
 	i := strings.LastIndexByte(ref, '.')
 	if i == -1 {
@@ -698,12 +698,12 @@ func extractDirectives(d []directive, cg *ast.CommentGroup) []directive {
 			d = append(d, directive{
 				kind: line[:i],
 				line: strings.TrimSpace(line[i+1:]),
-				pos:  cg.Pos(), // TODO(light): more precise position
+				pos:  cg.Pos(), // TODO(light): More precise position.
 			})
 		} else {
 			d = append(d, directive{
 				kind: line,
-				pos:  cg.Pos(), // TODO(light): more precise position
+				pos:  cg.Pos(), // TODO(light): More precise position.
 			})
 		}
 	}
@@ -749,7 +749,7 @@ func (d directive) args() []string {
 	for i, r := range d.line {
 		switch state {
 		case 0:
-			// Argument boundary
+			// Argument boundary.
 			switch {
 			case r == '"':
 				start = i
@@ -759,7 +759,7 @@ func (d directive) args() []string {
 				state = 1
 			}
 		case 1:
-			// In token
+			// In token.
 			switch {
 			case unicode.IsSpace(r):
 				args = append(args, d.line[start:i])
@@ -769,7 +769,7 @@ func (d directive) args() []string {
 				state = 2
 			}
 		case 2:
-			// In quotes
+			// In quotes.
 			switch {
 			case r == '"':
 				state = 1
@@ -791,7 +791,7 @@ func (d directive) args() []string {
 
 // isInjectFile reports whether a given file is an injection template.
 func isInjectFile(f *ast.File) bool {
-	// TODO(light): better determination
+	// TODO(light): Better determination.
 	for _, cg := range f.Comments {
 		text := cg.Text()
 		if strings.HasPrefix(text, "+build") && strings.Contains(text, "gooseinject") {
