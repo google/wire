@@ -72,7 +72,7 @@ package foobarbaz
 
 import (
 	// ...
-	"codename/goose"
+	"github.com/google/go-cloud/goose"
 )
 
 // ...
@@ -116,7 +116,7 @@ package main
 import (
 	"context"
 
-	"codename/goose"
+	"github.com/google/go-cloud/goose"
 	"example.com/foobarbaz"
 )
 
@@ -129,6 +129,9 @@ Like providers, injectors can be parameterized on inputs (which then get sent to
 providers) and can return errors. Arguments to `goose.Use` are the same as
 `goose.NewSet`: they form a provider set. This is the provider set that gets
 used during code generation for that injector.
+
+Any non-injector declarations found in a file with injectors will be copied into
+the generated file.
 
 You can generate the injector by invoking goose in the package directory:
 

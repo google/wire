@@ -12,17 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//+build gooseinject
+
+// This file is specifically designed to cause issues with copying the
+// AST, particularly with the identifier "context".
+
 package main
 
 import (
 	stdcontext "context"
 	"fmt"
 	"os"
+	"reflect"
+
+	"github.com/google/go-cloud/goose"
 )
 
 type context struct{}
 
 func main() {
+	if _, ok := reflect.TypeOf(context{}).MethodByName("Provide"); !ok {
+		fmt.Println("ERROR: context.Provide renamed")
+		os.Exit(1)
+	}
 	c, err := inject(stdcontext.Background(), struct{}{})
 	if err != nil {
 		fmt.Println("ERROR:", err)
@@ -31,6 +43,16 @@ func main() {
 	fmt.Println(c)
 }
 
-func provide(ctx stdcontext.Context) (context, error) {
+func Provide(context2 stdcontext.Context) (context, error) {
+	var context3 = stdcontext.Background()
+	_ = context2
+	_ = context3
 	return context{}, nil
+}
+
+func inject(context stdcontext.Context, err struct{}) (context, error) {
+	panic(goose.Use(Provide))
+}
+
+func (context) Provide() {
 }

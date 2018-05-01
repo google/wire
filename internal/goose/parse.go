@@ -1,3 +1,17 @@
+// Copyright 2018 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package goose
 
 import (
@@ -478,6 +492,9 @@ func isInjector(info *types.Info, fn *ast.FuncDecl) *ast.CallExpr {
 			return nil
 		}
 	}
+	if only == nil {
+		return nil
+	}
 	panicCall, ok := only.X.(*ast.CallExpr)
 	if !ok {
 		return nil
@@ -509,7 +526,7 @@ func isGooseImport(path string) bool {
 	if i := strings.LastIndex(path, vendorPart); i != -1 && (i == 0 || path[i-1] == '/') {
 		path = path[i+len(vendorPart):]
 	}
-	return path == "codename/goose"
+	return path == "github.com/google/go-cloud/goose"
 }
 
 // paramIndex returns the index of the parameter with the given name, or

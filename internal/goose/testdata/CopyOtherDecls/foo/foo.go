@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//+build gooseinject
+
+// All of the declarations are in one file.
+// goose should copy non-injectors over, preserving imports.
+
 package main
 
 import (
@@ -21,20 +26,14 @@ import (
 )
 
 func main() {
-	fmt.Println(injectFooBar())
+	fmt.Println(injectedMessage())
 }
 
-type Foo int
-type FooBar int
-
-var Set = goose.NewSet(
-	provideFoo,
-	provideFooBar)
-
-func provideFoo() Foo {
-	return 41
+// provideMessage provides a friendly user greeting.
+func provideMessage() string {
+	return "Hello, World!"
 }
 
-func provideFooBar(foo Foo) FooBar {
-	return FooBar(foo) + 1
+func injectedMessage() string {
+	panic(goose.Use(provideMessage))
 }

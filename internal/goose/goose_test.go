@@ -1,3 +1,17 @@
+// Copyright 2018 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package goose
 
 import (
@@ -99,7 +113,7 @@ func TestGoose(t *testing.T) {
 				}
 				out, err := exec.Command(testExePath).Output()
 				if err != nil {
-					t.Fatal("run compiled program:", err)
+					t.Error("run compiled program:", err)
 				}
 				if !bytes.Equal(out, test.wantOutput) {
 					t.Errorf("compiled program output = %q; want %q", out, test.wantOutput)
@@ -249,7 +263,7 @@ func loadTestCase(root string, gooseGoSrc []byte) (*testCase, error) {
 		out = nil
 	}
 	goFiles := map[string][]byte{
-		"codename/goose/goose.go": gooseGoSrc,
+		"github.com/google/go-cloud/goose/goose.go": gooseGoSrc,
 	}
 	err = filepath.Walk(root, func(src string, info os.FileInfo, err error) error {
 		if err != nil {
