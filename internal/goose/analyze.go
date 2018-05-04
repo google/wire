@@ -16,17 +16,34 @@ package goose
 
 import (
 	"fmt"
+	"go/ast"
 	"go/token"
 	"go/types"
 
 	"golang.org/x/tools/go/types/typeutil"
 )
 
+type callKind int
+
+const (
+	funcProviderCall callKind = iota
+	structProvider
+	valueExpr
+)
+
 // A call represents a step of an injector function.  It may be either a
 // function call or a composite struct literal, depending on the value
-// of isStruct.
+// of kind.
 type call struct {
-	// importPath and name identify the provider to call.
+	// kind indicates the code pattern to use.
+	kind callKind
+
+	// out is the type this step produces.
+	out types.Type
+
+	// importPath and name identify the provider to call for kind ==
+	// funcProviderCall or the type to construct for kind ==
+	// structProvider.
 	importPath string
 	name       string
 
@@ -34,24 +51,29 @@ type call struct {
 	// a) one of the givens (args[i] < len(given)),
 	// b) the result of a previous provider call (args[i] >= len(given)), or
 	// c) the zero value for the type (args[i] == -1).
+	//
+	// This will be nil for kind == valueExpr.
 	args []int
 
-	// isStruct indicates whether this should generate a struct composite
-	// literal instead of a function call.
-	isStruct bool
-
 	// fieldNames maps the arguments to struct field names.
-	// This will only be set if isStruct is true.
+	// This will only be set if kind == structProvider.
 	fieldNames []string
 
 	// ins is the list of types this call receives as arguments.
+	// This will be nil for kind == valueExpr.
 	ins []types.Type
-	// out is the type produced by this provider call.
-	out types.Type
+
+	// The following are only set for kind == funcProviderCall:
+
 	// hasCleanup is true if the provider call returns a cleanup function.
 	hasCleanup bool
 	// hasErr is true if the provider call returns an error.
 	hasErr bool
+
+	// The following are only set for kind == valueExpr:
+
+	valueExpr     ast.Expr
+	valueTypeInfo *types.Info
 }
 
 // solve finds the sequence of calls required to produce an output type
@@ -97,50 +119,69 @@ func solve(fset *token.FileSet, out types.Type, given []types.Type, set *Provide
 			}
 		}
 
-		p, _ := providers.At(typ).(*Provider)
-		if p == nil {
+		switch p := providers.At(typ).(type) {
+		case nil:
 			if len(trail) == 1 {
 				return fmt.Errorf("no provider found for %s (output of injector)", types.TypeString(typ, nil))
 			}
 			// TODO(light): Give name of provider.
 			return fmt.Errorf("no provider found for %s (required by provider of %s)", types.TypeString(typ, nil), types.TypeString(trail[len(trail)-2].Type, nil))
-		}
-		if !types.Identical(p.Out, typ) {
-			// Interface binding.  Don't create a call ourselves.
-			if err := visit(append(trail, ProviderInput{Type: p.Out})); err != nil {
-				return err
+		case *Provider:
+			if !types.Identical(p.Out, typ) {
+				// Interface binding.  Don't create a call ourselves.
+				if err := visit(append(trail, ProviderInput{Type: p.Out})); err != nil {
+					return err
+				}
+				index.Set(typ, index.At(p.Out))
+				return nil
 			}
-			index.Set(typ, index.At(p.Out))
-			return nil
-		}
-		for _, a := range p.Args {
-			// TODO(light): This will discard grown trail arrays.
-			if err := visit(append(trail, a)); err != nil {
-				return err
+			for _, a := range p.Args {
+				// TODO(light): This will discard grown trail arrays.
+				if err := visit(append(trail, a)); err != nil {
+					return err
+				}
 			}
-		}
-		args := make([]int, len(p.Args))
-		ins := make([]types.Type, len(p.Args))
-		for i := range p.Args {
-			ins[i] = p.Args[i].Type
-			if x := index.At(p.Args[i].Type); x != nil {
-				args[i] = x.(int)
-			} else {
-				args[i] = -1
+			args := make([]int, len(p.Args))
+			ins := make([]types.Type, len(p.Args))
+			for i := range p.Args {
+				ins[i] = p.Args[i].Type
+				args[i] = index.At(p.Args[i].Type).(int)
 			}
+			index.Set(typ, len(given)+len(calls))
+			kind := funcProviderCall
+			if p.IsStruct {
+				kind = structProvider
+			}
+			calls = append(calls, call{
+				kind:       kind,
+				importPath: p.ImportPath,
+				name:       p.Name,
+				args:       args,
+				fieldNames: p.Fields,
+				ins:        ins,
+				out:        typ,
+				hasCleanup: p.HasCleanup,
+				hasErr:     p.HasErr,
+			})
+		case *Value:
+			if !types.Identical(p.Out, typ) {
+				// Interface binding.  Don't create a call ourselves.
+				if err := visit(append(trail, ProviderInput{Type: p.Out})); err != nil {
+					return err
+				}
+				index.Set(typ, index.At(p.Out))
+				return nil
+			}
+			index.Set(typ, len(given)+len(calls))
+			calls = append(calls, call{
+				kind:          valueExpr,
+				out:           typ,
+				valueExpr:     p.expr,
+				valueTypeInfo: p.info,
+			})
+		default:
+			panic("unknown provider map value type")
 		}
-		index.Set(typ, len(given)+len(calls))
-		calls = append(calls, call{
-			importPath: p.ImportPath,
-			name:       p.Name,
-			args:       args,
-			isStruct:   p.IsStruct,
-			fieldNames: p.Fields,
-			ins:        ins,
-			out:        typ,
-			hasCleanup: p.HasCleanup,
-			hasErr:     p.HasErr,
-		})
 		return nil
 	}
 	if err := visit([]ProviderInput{{Type: out}}); err != nil {
@@ -155,7 +196,7 @@ func buildProviderMap(fset *token.FileSet, set *ProviderSet) (*typeutil.Map, err
 		set *ProviderSet
 	}
 
-	providerMap := new(typeutil.Map) // to *Provider
+	providerMap := new(typeutil.Map) // to *Provider or *Value
 	setMap := new(typeutil.Map)      // to *ProviderSet, for error messages
 	var bindings []binding
 	visited := make(map[*ProviderSet]struct{})
@@ -174,6 +215,13 @@ func buildProviderMap(fset *token.FileSet, set *ProviderSet) (*typeutil.Map, err
 			}
 			providerMap.Set(p.Out, p)
 			setMap.Set(p.Out, curr)
+		}
+		for _, v := range curr.Values {
+			if providerMap.At(v.Out) != nil {
+				return nil, bindingConflictError(fset, v.Pos, v.Out, setMap.At(v.Out).(*ProviderSet))
+			}
+			providerMap.Set(v.Out, v)
+			setMap.Set(v.Out, curr)
 		}
 		for _, b := range curr.Bindings {
 			bindings = append(bindings, binding{

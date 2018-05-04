@@ -304,6 +304,33 @@ func injectFooBar() FooBar {
 
 And similarly if the injector needed a `*FooBar`.
 
+### Binding Values
+
+Occasionally, it is useful to bind a basic value (usually `nil`) to a type.
+Instead of having injectors depend on a throwaway provider function, you can
+add a value expression to a provider set.
+
+```go
+type Foo int
+
+func injectFoo() Foo {
+	panic(goose.Use(goose.Value(Foo(42))))
+}
+```
+
+The generated injector would look like this:
+
+```go
+func injectFoo() Foo {
+	foo := Foo(42)
+	return foo
+}
+```
+
+It's important to note that the expression will be copied, so references to
+variables will be evaluated during the call to the injector. goose will emit
+an error if the expression calls any functions.
+
 ### Cleanup functions
 
 If a provider creates a value that needs to be cleaned up (e.g. closing a file),

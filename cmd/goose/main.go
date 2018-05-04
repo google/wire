@@ -132,6 +132,8 @@ func show(pkgs ...string) error {
 				switch v := v.(type) {
 				case *goose.Provider:
 					out[types.TypeString(t, nil)] = v.Pos
+				case *goose.Value:
+					out[types.TypeString(t, nil)] = v.Pos
 				case *goose.IfaceBinding:
 					out[types.TypeString(t, nil)] = v.Pos
 				default:
@@ -150,7 +152,7 @@ func show(pkgs ...string) error {
 type outGroup struct {
 	name    string
 	inputs  *typeutil.Map // values are not important
-	outputs *typeutil.Map // values are either *goose.Provider or *goose.IfaceBinding
+	outputs *typeutil.Map // values are *goose.Provider, *goose.Value, or *goose.IfaceBinding
 }
 
 // gather flattens a provider set into outputs grouped by the inputs
@@ -179,6 +181,9 @@ func gather(info *goose.Info, key goose.ProviderSetID) (_ []outGroup, imports ma
 		}
 		for _, b := range curr.Bindings {
 			pm.Set(b.Iface, b)
+		}
+		for _, v := range curr.Values {
+			pm.Set(v.Out, v)
 		}
 		for _, imp := range curr.Imports {
 			next = append(next, imp)
@@ -245,6 +250,24 @@ func gather(info *goose.Info, key goose.ProviderSetID) (_ []outGroup, imports ma
 						continue dfs
 					}
 				}
+				out := new(typeutil.Map)
+				out.SetHasher(hash)
+				out.Set(p.Out, p)
+				inputVisited.Set(p.Out, len(groups))
+				groups = append(groups, outGroup{
+					inputs:  in,
+					outputs: out,
+				})
+			case *goose.Value:
+				for i := range groups {
+					if groups[i].inputs.Len() == 0 {
+						groups[i].outputs.Set(p.Out, p)
+						inputVisited.Set(p.Out, i)
+						continue dfs
+					}
+				}
+				in := new(typeutil.Map)
+				in.SetHasher(hash)
 				out := new(typeutil.Map)
 				out.SetHasher(hash)
 				out.Set(p.Out, p)

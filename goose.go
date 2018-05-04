@@ -50,3 +50,15 @@ type Binding struct{}
 func Bind(iface, to interface{}) Binding {
 	return Binding{}
 }
+
+// A ProvidedValue is an expression that is copied to the generated injector.
+type ProvidedValue struct{}
+
+// Value binds an expression to provide the type of the expression.
+//
+// Example:
+//
+//	var MySet = goose.NewSet(goose.Value([]string(nil)))
+func Value(interface{}) ProvidedValue {
+	return ProvidedValue{}
+}

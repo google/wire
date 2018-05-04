@@ -244,15 +244,24 @@ func (g *gen) inject(fset *token.FileSet, name string, sig *types.Signature, set
 		paramTypes[i] = types.TypeString(params.At(i).Type(), g.qualifyPkg)
 	}
 	for _, c := range calls {
-		g.qualifyImport(c.importPath)
-		if !c.isStruct {
-			// Struct providers just omit zero-valued fields.
-			continue
-		}
-		for i := range c.args {
-			if c.args[i] == -1 {
-				zeroValue(c.ins[i], g.qualifyPkg)
+		switch c.kind {
+		case funcProviderCall:
+			g.qualifyImport(c.importPath)
+			for i := range c.args {
+				if c.args[i] == -1 {
+					zeroValue(c.ins[i], g.qualifyPkg)
+				}
 			}
+		case structProvider:
+			g.qualifyImport(c.importPath)
+		case valueExpr:
+			if err := accessibleFrom(c.valueTypeInfo, c.valueExpr, g.currPackage); err != nil {
+				// TODO(light): Display line number of value expression.
+				ts := types.TypeString(c.out, nil)
+				return fmt.Errorf("inject %s: value %s can't be used: %v", name, ts, err)
+			}
+		default:
+			panic("unknown kind")
 		}
 	}
 	outTypeString := types.TypeString(outType, g.qualifyPkg)
@@ -326,7 +335,8 @@ func (g *gen) inject(fset *token.FileSet, name string, sig *types.Signature, set
 			g.p(", %s", errVar)
 		}
 		g.p(" := ")
-		if c.isStruct {
+		switch c.kind {
+		case structProvider:
 			if _, ok := c.out.(*types.Pointer); ok {
 				g.p("&")
 			}
@@ -345,7 +355,7 @@ func (g *gen) inject(fset *token.FileSet, name string, sig *types.Signature, set
 				g.p(",\n")
 			}
 			g.p("\t}\n")
-		} else {
+		case funcProviderCall:
 			g.p("%s(", g.qualifiedID(c.importPath, c.name))
 			for j, a := range c.args {
 				if j > 0 {
@@ -360,6 +370,11 @@ func (g *gen) inject(fset *token.FileSet, name string, sig *types.Signature, set
 				}
 			}
 			g.p(")\n")
+		case valueExpr:
+			g.writeAST(fset, c.valueTypeInfo, c.valueExpr)
+			g.p("\n")
+		default:
+			panic("unknown kind")
 		}
 		if c.hasErr {
 			g.p("\tif %s != nil {\n", errVar)
@@ -654,6 +669,32 @@ func disambiguate(name string, collides func(string) bool) string {
 			return sbuf
 		}
 	}
+}
+
+// accessibleFrom reports whether node can be copied to wantPkg without
+// violating Go visibility rules.
+func accessibleFrom(info *types.Info, node ast.Node, wantPkg string) error {
+	var unexportError error
+	ast.Inspect(node, func(node ast.Node) bool {
+		if unexportError != nil {
+			return false
+		}
+		ident, ok := node.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		obj := info.ObjectOf(ident)
+		if _, ok := obj.(*types.PkgName); ok {
+			// Local package names are fine, since we can just reimport them.
+			return true
+		}
+		if pkg := obj.Pkg(); pkg != nil && !ast.IsExported(ident.Name) && pkg.Path() != wantPkg {
+			unexportError = fmt.Errorf("uses unexported identifier %s", obj.Name())
+			return false
+		}
+		return true
+	})
+	return unexportError
 }
 
 var (

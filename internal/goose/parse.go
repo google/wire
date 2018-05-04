@@ -41,6 +41,7 @@ type ProviderSet struct {
 
 	Providers []*Provider
 	Bindings  []*IfaceBinding
+	Values    []*Value
 	Imports   []*ProviderSet
 }
 
@@ -98,6 +99,21 @@ type ProviderInput struct {
 	Type types.Type
 
 	// TODO(light): Move field name into this struct.
+}
+
+// Value describes a value expression.
+type Value struct {
+	// Pos is the source position of the expression defining this value.
+	Pos token.Pos
+
+	// Out is the type this value produces.
+	Out types.Type
+
+	// expr is the expression passed to goose.Value.
+	expr ast.Expr
+
+	// info is the type info for the expression.
+	info *types.Info
 }
 
 // Load finds all the provider sets in the given packages, as well as
@@ -163,7 +179,7 @@ func (id ProviderSetID) String() string {
 // objectCache is a lazily evaluated mapping of objects to goose structures.
 type objectCache struct {
 	prog    *loader.Program
-	objects map[objRef]interface{} // *Provider or *ProviderSet
+	objects map[objRef]interface{} // *Provider, *ProviderSet, *IfaceBinding, or *Value
 }
 
 type objRef struct {
@@ -179,7 +195,8 @@ func newObjectCache(prog *loader.Program) *objectCache {
 }
 
 // get converts a Go object into a goose structure. It may return a
-// *Provider, a structProviderPair, an *IfaceBinding, or a *ProviderSet.
+// *Provider, a structProviderPair, an *IfaceBinding, a *ProviderSet,
+// or a *Value.
 func (oc *objectCache) get(obj types.Object) (interface{}, error) {
 	ref := objRef{
 		importPath: obj.Pkg().Path(),
@@ -239,8 +256,8 @@ func (oc *objectCache) varDecl(obj *types.Var) *ast.ValueSpec {
 }
 
 // processExpr converts an expression into a goose structure. It may
-// return a *Provider, a structProviderPair, an *IfaceBinding, or a
-// *ProviderSet.
+// return a *Provider, a structProviderPair, an *IfaceBinding, a
+// *ProviderSet, or a *Value.
 func (oc *objectCache) processExpr(pkg *loader.PackageInfo, expr ast.Expr) (interface{}, error) {
 	exprPos := oc.prog.Fset.Position(expr.Pos())
 	expr = astutil.Unparen(expr)
@@ -269,6 +286,12 @@ func (oc *objectCache) processExpr(pkg *loader.PackageInfo, expr ast.Expr) (inte
 				return nil, fmt.Errorf("%v: %v", exprPos, err)
 			}
 			return b, nil
+		case "Value":
+			v, err := processValue(oc.prog.Fset, &pkg.Info, call)
+			if err != nil {
+				return nil, fmt.Errorf("%v: %v", exprPos, err)
+			}
+			return v, nil
 		default:
 			return nil, fmt.Errorf("%v: unknown pattern", exprPos)
 		}
@@ -312,6 +335,8 @@ func (oc *objectCache) processNewSet(pkg *loader.PackageInfo, call *ast.CallExpr
 			pset.Bindings = append(pset.Bindings, item)
 		case structProviderPair:
 			pset.Providers = append(pset.Providers, item.provider, item.ptrProvider)
+		case *Value:
+			pset.Values = append(pset.Values, item)
 		default:
 			panic("unknown item type")
 		}
@@ -468,6 +493,48 @@ func processBind(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*If
 		Pos:      call.Pos(),
 		Iface:    iface,
 		Provided: provided,
+	}, nil
+}
+
+// processValue creates a value from a goose.Value call.
+func processValue(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*Value, error) {
+	// Assumes that call.Fun is goose.Value.
+
+	if len(call.Args) != 1 {
+		return nil, fmt.Errorf("%v: call to Value takes exactly one argument", fset.Position(call.Pos()))
+	}
+	ok := true
+	ast.Inspect(call.Args[0], func(node ast.Node) bool {
+		switch node.(type) {
+		case nil, *ast.ArrayType, *ast.BasicLit, *ast.BinaryExpr, *ast.ChanType, *ast.CompositeLit, *ast.FuncType, *ast.Ident, *ast.IndexExpr, *ast.InterfaceType, *ast.KeyValueExpr, *ast.MapType, *ast.ParenExpr, *ast.SelectorExpr, *ast.SliceExpr, *ast.StarExpr, *ast.StructType, *ast.TypeAssertExpr:
+			// Good!
+		case *ast.UnaryExpr:
+			expr := node.(*ast.UnaryExpr)
+			if expr.Op == token.ARROW {
+				ok = false
+				return false
+			}
+		case *ast.CallExpr:
+			// Only acceptable if it's a type conversion.
+			call := node.(*ast.CallExpr)
+			if _, isFunc := info.TypeOf(call.Fun).(*types.Signature); isFunc {
+				ok = false
+				return false
+			}
+		default:
+			ok = false
+			return false
+		}
+		return true
+	})
+	if !ok {
+		return nil, fmt.Errorf("%v: argument to Value is too complex", fset.Position(call.Pos()))
+	}
+	return &Value{
+		Pos:  call.Args[0].Pos(),
+		Out:  info.TypeOf(call.Args[0]),
+		expr: call.Args[0],
+		info: info,
 	}, nil
 }
 
