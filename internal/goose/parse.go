@@ -15,6 +15,7 @@
 package goose
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -384,43 +385,20 @@ func qualifiedIdentObject(info *types.Info, expr ast.Expr) types.Object {
 // processFuncProvider creates a provider for a function declaration.
 func processFuncProvider(fset *token.FileSet, fn *types.Func) (*Provider, error) {
 	sig := fn.Type().(*types.Signature)
-
 	fpos := fn.Pos()
-	r := sig.Results()
-	var hasCleanup, hasErr bool
-	switch r.Len() {
-	case 1:
-		hasCleanup, hasErr = false, false
-	case 2:
-		switch t := r.At(1).Type(); {
-		case types.Identical(t, errorType):
-			hasCleanup, hasErr = false, true
-		case types.Identical(t, cleanupType):
-			hasCleanup, hasErr = true, false
-		default:
-			return nil, fmt.Errorf("%v: wrong signature for provider %s: second return type must be error or func()", fset.Position(fpos), fn.Name())
-		}
-	case 3:
-		if t := r.At(1).Type(); !types.Identical(t, cleanupType) {
-			return nil, fmt.Errorf("%v: wrong signature for provider %s: second return type must be func()", fset.Position(fpos), fn.Name())
-		}
-		if t := r.At(2).Type(); !types.Identical(t, errorType) {
-			return nil, fmt.Errorf("%v: wrong signature for provider %s: third return type must be error", fset.Position(fpos), fn.Name())
-		}
-		hasCleanup, hasErr = true, true
-	default:
-		return nil, fmt.Errorf("%v: wrong signature for provider %s: must have one return value and optional error", fset.Position(fpos), fn.Name())
+	providerSig, err := funcOutput(sig)
+	if err != nil {
+		return nil, fmt.Errorf("%v: wrong signature for provider %s: %v", fset.Position(fpos), fn.Name(), err)
 	}
-	out := r.At(0).Type()
 	params := sig.Params()
 	provider := &Provider{
 		ImportPath: fn.Pkg().Path(),
 		Name:       fn.Name(),
 		Pos:        fn.Pos(),
 		Args:       make([]ProviderInput, params.Len()),
-		Out:        out,
-		HasCleanup: hasCleanup,
-		HasErr:     hasErr,
+		Out:        providerSig.out,
+		HasCleanup: providerSig.cleanup,
+		HasErr:     providerSig.err,
 	}
 	for i := 0; i < params.Len(); i++ {
 		provider.Args[i] = ProviderInput{
@@ -433,6 +411,47 @@ func processFuncProvider(fset *token.FileSet, fn *types.Func) (*Provider, error)
 		}
 	}
 	return provider, nil
+}
+
+type outputSignature struct {
+	out     types.Type
+	cleanup bool
+	err     bool
+}
+
+// funcOutput validates an injector or provider function's return signature.
+func funcOutput(sig *types.Signature) (outputSignature, error) {
+	results := sig.Results()
+	switch results.Len() {
+	case 0:
+		return outputSignature{}, errors.New("no return values")
+	case 1:
+		return outputSignature{out: results.At(0).Type()}, nil
+	case 2:
+		out := results.At(0).Type()
+		switch t := results.At(1).Type(); {
+		case types.Identical(t, errorType):
+			return outputSignature{out: out, err: true}, nil
+		case types.Identical(t, cleanupType):
+			return outputSignature{out: out, cleanup: true}, nil
+		default:
+			return outputSignature{}, fmt.Errorf("second return type is %s; must be error or func()", types.TypeString(t, nil))
+		}
+	case 3:
+		if t := results.At(1).Type(); !types.Identical(t, cleanupType) {
+			return outputSignature{}, fmt.Errorf("second return type is %s; must be func()", types.TypeString(t, nil))
+		}
+		if t := results.At(2).Type(); !types.Identical(t, errorType) {
+			return outputSignature{}, fmt.Errorf("third return type is %s; must be error", types.TypeString(t, nil))
+		}
+		return outputSignature{
+			out:     results.At(0).Type(),
+			cleanup: true,
+			err:     true,
+		}, nil
+	default:
+		return outputSignature{}, errors.New("too many return values")
+	}
 }
 
 // processStructProvider creates a provider for a named struct type.

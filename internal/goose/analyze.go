@@ -48,9 +48,8 @@ type call struct {
 	name       string
 
 	// args is a list of arguments to call the provider with.  Each element is:
-	// a) one of the givens (args[i] < len(given)),
-	// b) the result of a previous provider call (args[i] >= len(given)), or
-	// c) the zero value for the type (args[i] == -1).
+	// a) one of the givens (args[i] < len(given)), or
+	// b) the result of a previous provider call (args[i] >= len(given))
 	//
 	// This will be nil for kind == valueExpr.
 	args []int
