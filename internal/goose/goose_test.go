@@ -182,19 +182,23 @@ func TestUnexport(t *testing.T) {
 func TestDisambiguate(t *testing.T) {
 	tests := []struct {
 		name     string
+		contains string
 		collides map[string]bool
 	}{
-		{"foo", nil},
-		{"foo", map[string]bool{"foo": true}},
-		{"foo", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
-		{"foo1", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
-		{"foo\u0661", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
-		{"foo\u0661", map[string]bool{"foo": true, "foo1": true, "foo2": true, "foo\u0661": true}},
+		{"foo", "foo", nil},
+		{"foo", "foo", map[string]bool{"foo": true}},
+		{"foo", "foo", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
+		{"foo1", "foo", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
+		{"foo\u0661", "foo", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
+		{"foo\u0661", "foo", map[string]bool{"foo": true, "foo1": true, "foo2": true, "foo\u0661": true}},
 	}
 	for _, test := range tests {
 		got := disambiguate(test.name, func(name string) bool { return test.collides[name] })
 		if !isIdent(got) {
 			t.Errorf("disambiguate(%q, %v) = %q; not an identifier", test.name, test.collides, got)
+		}
+		if !strings.Contains(got, test.contains) {
+			t.Errorf("disambiguate(%q, %v) = %q; wanted to contain %q", test.name, test.collides, got, test.contains)
 		}
 		if test.collides[got] {
 			t.Errorf("disambiguate(%q, %v) = %q; ", test.name, test.collides, got)
