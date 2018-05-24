@@ -35,5 +35,5 @@ func provideMessage() string {
 }
 
 func injectedMessage() string {
-	panic(goose.Use(provideMessage))
+	panic(goose.Build(provideMessage))
 }

@@ -23,5 +23,5 @@ import (
 )
 
 func inject(context stdcontext.Context, err struct{}) (context, error) {
-	panic(goose.Use(provide))
+	panic(goose.Build(provide))
 }

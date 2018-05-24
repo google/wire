@@ -92,8 +92,8 @@ func generateInjectors(g *gen, pkgInfo *loader.PackageInfo) (injectorFiles []*as
 			if !ok {
 				continue
 			}
-			useCall := isInjector(&pkgInfo.Info, fn)
-			if useCall == nil {
+			buildCall := isInjector(&pkgInfo.Info, fn)
+			if buildCall == nil {
 				continue
 			}
 			if len(injectorFiles) == 0 || injectorFiles[len(injectorFiles)-1] != f {
@@ -103,7 +103,7 @@ func generateInjectors(g *gen, pkgInfo *loader.PackageInfo) (injectorFiles []*as
 				g.p("// Injectors from %s:\n\n", name)
 				injectorFiles = append(injectorFiles, f)
 			}
-			set, err := oc.processNewSet(pkgInfo, useCall)
+			set, err := oc.processNewSet(pkgInfo, buildCall)
 			if err != nil {
 				return nil, fmt.Errorf("%v: %v", g.prog.Fset.Position(fn.Pos()), err)
 			}

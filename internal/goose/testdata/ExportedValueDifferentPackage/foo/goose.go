@@ -24,5 +24,5 @@ import (
 )
 
 func injectedFile() *os.File {
-	panic(goose.Use(bar.Value))
+	panic(goose.Build(bar.Value))
 }

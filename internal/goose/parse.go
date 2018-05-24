@@ -31,7 +31,7 @@ import (
 // A ProviderSet describes a set of providers.  The zero value is an empty
 // ProviderSet.
 type ProviderSet struct {
-	// Pos is the position of the call to goose.NewSet or goose.Use that
+	// Pos is the position of the call to goose.NewSet or goose.Build that
 	// created the set.
 	Pos token.Pos
 	// PkgPath is the import path of the package that declared this set.
@@ -316,7 +316,7 @@ type structProviderPair struct {
 }
 
 func (oc *objectCache) processNewSet(pkg *loader.PackageInfo, call *ast.CallExpr) (*ProviderSet, error) {
-	// Assumes that call.Fun is goose.NewSet or goose.Use.
+	// Assumes that call.Fun is goose.NewSet or goose.Build.
 
 	pset := &ProviderSet{
 		Pos:     call.Pos(),
@@ -558,7 +558,7 @@ func processValue(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*V
 }
 
 // isInjector checks whether a given function declaration is an
-// injector template, returning the goose.Use call. It returns nil if
+// injector template, returning the goose.Build call. It returns nil if
 // the function is not an injector template.
 func isInjector(info *types.Info, fn *ast.FuncDecl) *ast.CallExpr {
 	if fn.Body == nil {
@@ -595,15 +595,15 @@ func isInjector(info *types.Info, fn *ast.FuncDecl) *ast.CallExpr {
 	if len(panicCall.Args) != 1 {
 		return nil
 	}
-	useCall, ok := panicCall.Args[0].(*ast.CallExpr)
+	buildCall, ok := panicCall.Args[0].(*ast.CallExpr)
 	if !ok {
 		return nil
 	}
-	useObj := qualifiedIdentObject(info, useCall.Fun)
-	if !isGooseImport(useObj.Pkg().Path()) || useObj.Name() != "Use" {
+	buildObj := qualifiedIdentObject(info, buildCall.Fun)
+	if !isGooseImport(buildObj.Pkg().Path()) || buildObj.Name() != "Build" {
 		return nil
 	}
-	return useCall
+	return buildCall
 }
 
 func isGooseImport(path string) bool {

@@ -51,7 +51,7 @@ func Provide(context2 stdcontext.Context) (context, error) {
 }
 
 func inject(context stdcontext.Context, err struct{}) (context, error) {
-	panic(goose.Use(Provide))
+	panic(goose.Build(Provide))
 }
 
 func (context) Provide() {

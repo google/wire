@@ -102,7 +102,7 @@ calls providers in dependency order. With goose, you write the injector's
 signature, then goose generates the function's body.
 
 An injector is declared by writing a function declaration whose body is a call
-to `panic()` with a call to `goose.Use` as its argument. Let's say that the
+to `panic()` with a call to `goose.Build` as its argument. Let's say that the
 above providers were defined in a package called `example.com/foobarbaz`. The
 following would declare an injector to obtain a `Baz`:
 
@@ -121,12 +121,12 @@ import (
 )
 
 func initializeApp(ctx context.Context) (foobarbaz.Baz, error) {
-	panic(goose.Use(foobarbaz.MegaSet))
+	panic(goose.Build(foobarbaz.MegaSet))
 }
 ```
 
 Like providers, injectors can be parameterized on inputs (which then get sent to
-providers) and can return errors. Arguments to `goose.Use` are the same as
+providers) and can return errors. Arguments to `goose.Build` are the same as
 `goose.NewSet`: they form a provider set. This is the provider set that gets
 used during code generation for that injector.
 
@@ -314,7 +314,7 @@ add a value expression to a provider set.
 type Foo int
 
 func injectFoo() Foo {
-	panic(goose.Use(goose.Value(Foo(42))))
+	panic(goose.Build(goose.Value(Foo(42))))
 }
 ```
 

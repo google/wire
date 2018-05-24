@@ -21,5 +21,5 @@ import (
 )
 
 func injectFoo() (Foo, error) {
-	panic(goose.Use(Set))
+	panic(goose.Build(Set))
 }

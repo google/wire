@@ -21,5 +21,5 @@ import (
 )
 
 func injectedMessage() string {
-	panic(goose.Use(provideMessage))
+	panic(goose.Build(provideMessage))
 }

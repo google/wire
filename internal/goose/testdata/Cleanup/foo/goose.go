@@ -21,5 +21,5 @@ import (
 )
 
 func injectBar() (*Bar, func()) {
-	panic(goose.Use(provideFoo, provideBar))
+	panic(goose.Build(provideFoo, provideBar))
 }

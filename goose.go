@@ -25,16 +25,16 @@ func NewSet(...interface{}) ProviderSet {
 	return ProviderSet{}
 }
 
-// Use is placed in the body of an injector function to declare the
+// Build is placed in the body of an injector function to declare the
 // providers to use. Its arguments are the same as NewSet. Its return
 // value is an error message that can be sent to panic.
 //
 // Example:
 //
 //	func injector(ctx context.Context) (*sql.DB, error) {
-//		panic(Use(otherpkg.Foo, myProviderFunc, goose.Bind()))
+//		panic(Build(otherpkg.Foo, myProviderFunc, goose.Bind()))
 //	}
-func Use(...interface{}) string {
+func Build(...interface{}) string {
 	return "implementation not generated, run goose"
 }
 
