@@ -496,21 +496,25 @@ func processBind(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*If
 		return nil, fmt.Errorf("%v: call to Bind takes exactly two arguments", fset.Position(call.Pos()))
 	}
 	// TODO(light): Verify that arguments are simple expressions.
-	iface := info.TypeOf(call.Args[0])
-	methodSet, ok := iface.Underlying().(*types.Interface)
+	ifaceArgType := info.TypeOf(call.Args[0])
+	ifacePtr, ok := ifaceArgType.(*types.Pointer)
 	if !ok {
-		return nil, fmt.Errorf("%v: first argument to bind must be of interface type; found %s", fset.Position(call.Pos()), types.TypeString(iface, nil))
+		return nil, fmt.Errorf("%v: first argument to bind must be a pointer to an interface type; found %s", fset.Position(call.Pos()), types.TypeString(ifaceArgType, nil))
+	}
+	methodSet, ok := ifacePtr.Elem().Underlying().(*types.Interface)
+	if !ok {
+		return nil, fmt.Errorf("%v: first argument to bind must be a pointer to an interface type; found %s", fset.Position(call.Pos()), types.TypeString(ifaceArgType, nil))
 	}
 	provided := info.TypeOf(call.Args[1])
-	if types.Identical(iface, provided) {
+	if types.Identical(ifacePtr.Elem(), provided) {
 		return nil, fmt.Errorf("%v: cannot bind interface to itself", fset.Position(call.Pos()))
 	}
 	if !types.Implements(provided, methodSet) {
-		return nil, fmt.Errorf("%v: %s does not implement %s", fset.Position(call.Pos()), types.TypeString(provided, nil), types.TypeString(iface, nil))
+		return nil, fmt.Errorf("%v: %s does not implement %s", fset.Position(call.Pos()), types.TypeString(provided, nil), types.TypeString(ifaceArgType, nil))
 	}
 	return &IfaceBinding{
 		Pos:      call.Pos(),
-		Iface:    iface,
+		Iface:    ifacePtr.Elem(),
 		Provided: provided,
 	}, nil
 }

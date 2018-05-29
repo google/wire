@@ -17,8 +17,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/google/go-cloud/goose"
 	"foo"
+	"github.com/google/go-cloud/goose"
 )
 
 func main() {
@@ -39,4 +39,4 @@ func provideBar() *Bar {
 
 var Set = goose.NewSet(
 	provideBar,
-	goose.Bind(foo.Fooer(nil), (*Bar)(nil)))
+	goose.Bind((*foo.Fooer)(nil), (*Bar)(nil)))

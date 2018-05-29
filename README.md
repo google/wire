@@ -247,13 +247,13 @@ func ProvideBar() *Bar {
 
 var BarFooer = goose.NewSet(
 	ProvideBar,
-	goose.Bind(Fooer(nil), (*Bar)(nil)))
+	goose.Bind(new(Fooer), new(Bar)))
 ```
 
-The first argument to `goose.Bind` is a nil value for the interface type and the
-second argument is a zero value of the concrete type. An interface binding does
-not necessarily need to have a provider in the same set that provides the
-concrete type.
+The first argument to `goose.Bind` is a pointer to a value of the desired
+interface type and the second argument is a zero value of the concrete type. An
+interface binding does not necessarily need to have a provider in the same set
+that provides the concrete type.
 
 [type identity]: https://golang.org/ref/spec#Type_identity
 [return concrete types]: https://github.com/golang/go/wiki/CodeReviewComments#interfaces

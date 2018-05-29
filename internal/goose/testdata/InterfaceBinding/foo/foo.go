@@ -42,4 +42,4 @@ func provideBar() *Bar {
 
 var Set = goose.NewSet(
 	provideBar,
-	goose.Bind(Fooer(nil), (*Bar)(nil)))
+	goose.Bind((*Fooer)(nil), (*Bar)(nil)))
