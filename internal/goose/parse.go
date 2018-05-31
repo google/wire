@@ -618,14 +618,3 @@ func isGooseImport(path string) bool {
 	}
 	return path == "github.com/google/go-cloud/goose"
 }
-
-// paramIndex returns the index of the parameter with the given name, or
-// -1 if no such parameter exists.
-func paramIndex(params *types.Tuple, name string) int {
-	for i := 0; i < params.Len(); i++ {
-		if params.At(i).Name() == name {
-			return i
-		}
-	}
-	return -1
-}
