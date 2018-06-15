@@ -85,18 +85,22 @@ func solve(fset *token.FileSet, out types.Type, given []types.Type, set *Provide
 			}
 		}
 	}
-	providers, err := buildProviderMap(fset, set)
-	if err != nil {
-		return nil, err
-	}
 
 	// Start building the mapping of type to local variable of the given type.
 	// The first len(given) local variables are the given types.
 	index := new(typeutil.Map)
 	for i, g := range given {
-		if p := providers.At(g); p != nil {
-			pp := p.(*Provider)
-			return nil, fmt.Errorf("input of %s conflicts with provider %s at %s", types.TypeString(g, nil), pp.Name, fset.Position(pp.Pos))
+		if pv := set.For(g); !pv.IsNil() {
+			switch {
+			case pv.IsProvider():
+				return nil, fmt.Errorf("input of %s conflicts with provider %s at %s",
+					types.TypeString(g, nil), pv.Provider().Name, fset.Position(pv.Provider().Pos))
+			case pv.IsValue():
+				return nil, fmt.Errorf("input of %s conflicts with value at %s",
+					types.TypeString(g, nil), fset.Position(pv.Value().Pos))
+			default:
+				panic("unknown return value from ProviderSet.For")
+			}
 		}
 		index.Set(g, i)
 	}
@@ -118,14 +122,15 @@ func solve(fset *token.FileSet, out types.Type, given []types.Type, set *Provide
 			}
 		}
 
-		switch p := providers.At(typ).(type) {
-		case nil:
+		switch pv := set.For(typ); {
+		case pv.IsNil():
 			if len(trail) == 1 {
 				return fmt.Errorf("no provider found for %s (output of injector)", types.TypeString(typ, nil))
 			}
 			// TODO(light): Give name of provider.
 			return fmt.Errorf("no provider found for %s (required by provider of %s)", types.TypeString(typ, nil), types.TypeString(trail[len(trail)-2].Type, nil))
-		case *Provider:
+		case pv.IsProvider():
+			p := pv.Provider()
 			if !types.Identical(p.Out, typ) {
 				// Interface binding.  Don't create a call ourselves.
 				if err := visit(append(trail, ProviderInput{Type: p.Out})); err != nil {
@@ -162,24 +167,25 @@ func solve(fset *token.FileSet, out types.Type, given []types.Type, set *Provide
 				hasCleanup: p.HasCleanup,
 				hasErr:     p.HasErr,
 			})
-		case *Value:
-			if !types.Identical(p.Out, typ) {
+		case pv.IsValue():
+			v := pv.Value()
+			if !types.Identical(v.Out, typ) {
 				// Interface binding.  Don't create a call ourselves.
-				if err := visit(append(trail, ProviderInput{Type: p.Out})); err != nil {
+				if err := visit(append(trail, ProviderInput{Type: v.Out})); err != nil {
 					return err
 				}
-				index.Set(typ, index.At(p.Out))
+				index.Set(typ, index.At(v.Out))
 				return nil
 			}
 			index.Set(typ, len(given)+len(calls))
 			calls = append(calls, call{
 				kind:          valueExpr,
 				out:           typ,
-				valueExpr:     p.expr,
-				valueTypeInfo: p.info,
+				valueExpr:     v.expr,
+				valueTypeInfo: v.info,
 			})
 		default:
-			panic("unknown provider map value type")
+			panic("unknown return value from ProviderSet.For")
 		}
 		return nil
 	}
@@ -189,52 +195,44 @@ func solve(fset *token.FileSet, out types.Type, given []types.Type, set *Provide
 	return calls, nil
 }
 
-func buildProviderMap(fset *token.FileSet, set *ProviderSet) (*typeutil.Map, error) {
-	type binding struct {
-		*IfaceBinding
-		set *ProviderSet
+// buildProviderMap creates the providerMap field for a given provider set.
+// The given provider set's providerMap field is ignored.
+func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *ProviderSet) (*typeutil.Map, error) {
+	providerMap := new(typeutil.Map)
+	providerMap.SetHasher(hasher)
+	setMap := new(typeutil.Map) // to *ProviderSet, for error messages
+	setMap.SetHasher(hasher)
+
+	// Process imports first, verifying that there are no conflicts between sets.
+	for _, imp := range set.Imports {
+		for _, k := range imp.providerMap.Keys() {
+			if providerMap.At(k) != nil {
+				return nil, bindingConflictError(fset, imp.Pos, k, setMap.At(k).(*ProviderSet))
+			}
+			providerMap.Set(k, imp.providerMap.At(k))
+			setMap.Set(k, imp)
+		}
 	}
 
-	providerMap := new(typeutil.Map) // to *Provider or *Value
-	setMap := new(typeutil.Map)      // to *ProviderSet, for error messages
-	var bindings []binding
-	visited := make(map[*ProviderSet]struct{})
-	next := []*ProviderSet{set}
-	for len(next) > 0 {
-		curr := next[0]
-		copy(next, next[1:])
-		next = next[:len(next)-1]
-		if _, skip := visited[curr]; skip {
-			continue
+	// Process non-binding providers in new set.
+	for _, p := range set.Providers {
+		if providerMap.At(p.Out) != nil {
+			return nil, bindingConflictError(fset, p.Pos, p.Out, setMap.At(p.Out).(*ProviderSet))
 		}
-		visited[curr] = struct{}{}
-		for _, p := range curr.Providers {
-			if providerMap.At(p.Out) != nil {
-				return nil, bindingConflictError(fset, p.Pos, p.Out, setMap.At(p.Out).(*ProviderSet))
-			}
-			providerMap.Set(p.Out, p)
-			setMap.Set(p.Out, curr)
-		}
-		for _, v := range curr.Values {
-			if providerMap.At(v.Out) != nil {
-				return nil, bindingConflictError(fset, v.Pos, v.Out, setMap.At(v.Out).(*ProviderSet))
-			}
-			providerMap.Set(v.Out, v)
-			setMap.Set(v.Out, curr)
-		}
-		for _, b := range curr.Bindings {
-			bindings = append(bindings, binding{
-				IfaceBinding: b,
-				set:          curr,
-			})
-		}
-		for _, imp := range curr.Imports {
-			next = append(next, imp)
-		}
+		providerMap.Set(p.Out, p)
+		setMap.Set(p.Out, set)
 	}
-	// Validate that bindings have their concrete type provided in the set.
-	// TODO(light): Move this validation up into provider set creation.
-	for _, b := range bindings {
+	for _, v := range set.Values {
+		if providerMap.At(v.Out) != nil {
+			return nil, bindingConflictError(fset, v.Pos, v.Out, setMap.At(v.Out).(*ProviderSet))
+		}
+		providerMap.Set(v.Out, v)
+		setMap.Set(v.Out, set)
+	}
+
+	// Process bindings in set. Must happen after the other providers to
+	// ensure the concrete type is being provided.
+	for _, b := range set.Bindings {
 		if providerMap.At(b.Iface) != nil {
 			return nil, bindingConflictError(fset, b.Pos, b.Iface, setMap.At(b.Iface).(*ProviderSet))
 		}
@@ -245,7 +243,7 @@ func buildProviderMap(fset *token.FileSet, set *ProviderSet) (*typeutil.Map, err
 			return nil, fmt.Errorf("%v: no binding for %s", pos, typ)
 		}
 		providerMap.Set(b.Iface, concrete)
-		setMap.Set(b.Iface, b.set)
+		setMap.Set(b.Iface, set)
 	}
 	return providerMap, nil
 }

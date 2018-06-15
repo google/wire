@@ -26,6 +26,7 @@ import (
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/loader"
+	"golang.org/x/tools/go/types/typeutil"
 )
 
 // A ProviderSet describes a set of providers.  The zero value is an empty
@@ -44,6 +45,31 @@ type ProviderSet struct {
 	Bindings  []*IfaceBinding
 	Values    []*Value
 	Imports   []*ProviderSet
+
+	// providerMap maps from provided type to a *Provider or *Value.
+	// It includes all of the imported types.
+	providerMap *typeutil.Map
+}
+
+// Outputs returns a new slice containing the set of possible types the
+// provider set can produce. The order is unspecified.
+func (set *ProviderSet) Outputs() []types.Type {
+	return set.providerMap.Keys()
+}
+
+// For returns the provider or value for the given type, or the zero
+// ProviderOrValue.
+func (set *ProviderSet) For(t types.Type) ProviderOrValue {
+	switch x := set.providerMap.At(t).(type) {
+	case nil:
+		return ProviderOrValue{}
+	case *Provider:
+		return ProviderOrValue{p: x}
+	case *Value:
+		return ProviderOrValue{v: x}
+	default:
+		panic("invalid value in typeMap")
+	}
 }
 
 // An IfaceBinding declares that a type should be used to satisfy inputs
@@ -181,6 +207,7 @@ func (id ProviderSetID) String() string {
 type objectCache struct {
 	prog    *loader.Program
 	objects map[objRef]interface{} // *Provider, *ProviderSet, *IfaceBinding, or *Value
+	hasher  typeutil.Hasher
 }
 
 type objRef struct {
@@ -192,6 +219,7 @@ func newObjectCache(prog *loader.Program) *objectCache {
 	return &objectCache{
 		prog:    prog,
 		objects: make(map[objRef]interface{}),
+		hasher:  typeutil.MakeHasher(),
 	}
 }
 
@@ -341,6 +369,11 @@ func (oc *objectCache) processNewSet(pkg *loader.PackageInfo, call *ast.CallExpr
 		default:
 			panic("unknown item type")
 		}
+	}
+	var err error
+	pset.providerMap, err = buildProviderMap(oc.prog.Fset, oc.hasher, pset)
+	if err != nil {
+		return nil, err
 	}
 	return pset, nil
 }
@@ -617,4 +650,44 @@ func isWireImport(path string) bool {
 		path = path[i+len(vendorPart):]
 	}
 	return path == "github.com/google/go-cloud/wire"
+}
+
+// ProviderOrValue is a pointer to a Provider or a Value. The zero value is
+// a nil pointer.
+type ProviderOrValue struct {
+	p *Provider
+	v *Value
+}
+
+// IsNil reports whether pv is the zero value.
+func (pv ProviderOrValue) IsNil() bool {
+	return pv.p == nil && pv.v == nil
+}
+
+// IsProvider reports whether pv points to a Provider.
+func (pv ProviderOrValue) IsProvider() bool {
+	return pv.p != nil
+}
+
+// IsValue reports whether pv points to a Value.
+func (pv ProviderOrValue) IsValue() bool {
+	return pv.v != nil
+}
+
+// Provider returns pv as a Provider pointer. It panics if pv points to a
+// Value.
+func (pv ProviderOrValue) Provider() *Provider {
+	if pv.v != nil {
+		panic("Value pointer converted to a Provider")
+	}
+	return pv.p
+}
+
+// Provider returns pv as a Value pointer. It panics if pv points to a
+// Provider.
+func (pv ProviderOrValue) Value() *Value {
+	if pv.p != nil {
+		panic("Provider pointer converted to a Value")
+	}
+	return pv.v
 }

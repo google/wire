@@ -48,7 +48,17 @@ type Binding struct{}
 //
 // Example:
 //
-//	var MySet = wire.NewSet(wire.Bind(new(MyInterface), new(MyStruct)))
+//	type Fooer interface {
+//		Foo()
+//	}
+//
+//	type MyFoo struct{}
+//
+//	func (MyFoo) Foo() {}
+//
+//	var MySet = wire.NewSet(
+//		MyFoo{},
+//		wire.Bind(new(Fooer), new(MyFoo)))
 func Bind(iface, to interface{}) Binding {
 	return Binding{}
 }

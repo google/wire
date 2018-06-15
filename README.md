@@ -260,9 +260,9 @@ var BarFooer = wire.NewSet(
 ```
 
 The first argument to `wire.Bind` is a pointer to a value of the desired
-interface type and the second argument is a zero value of the concrete type. An
-interface binding does not necessarily need to have a provider in the same set
-that provides the concrete type.
+interface type and the second argument is a zero value of the concrete type.
+Any set that includes an interface binding must also have a provider in the
+same set that provides the concrete type.
 
 [type identity]: https://golang.org/ref/spec#Type_identity
 [return concrete types]: https://github.com/golang/go/wiki/CodeReviewComments#interfaces
