@@ -578,6 +578,11 @@ func isInjector(info *types.Info, fn *ast.FuncDecl) *ast.CallExpr {
 			only = stmt
 		case *ast.EmptyStmt:
 			// Do nothing.
+		case *ast.ReturnStmt:
+			// Allow the function to end in a return.
+			if only == nil {
+				return nil
+			}
 		default:
 			return nil
 		}
@@ -585,29 +590,24 @@ func isInjector(info *types.Info, fn *ast.FuncDecl) *ast.CallExpr {
 	if only == nil {
 		return nil
 	}
-	panicCall, ok := only.X.(*ast.CallExpr)
+	call, ok := only.X.(*ast.CallExpr)
 	if !ok {
 		return nil
 	}
-	panicIdent, ok := panicCall.Fun.(*ast.Ident)
-	if !ok {
-		return nil
+	if qualifiedIdentObject(info, call.Fun) == types.Universe.Lookup("panic") {
+		if len(call.Args) != 1 {
+			return nil
+		}
+		call, ok = call.Args[0].(*ast.CallExpr)
+		if !ok {
+			return nil
+		}
 	}
-	if info.ObjectOf(panicIdent) != types.Universe.Lookup("panic") {
-		return nil
-	}
-	if len(panicCall.Args) != 1 {
-		return nil
-	}
-	buildCall, ok := panicCall.Args[0].(*ast.CallExpr)
-	if !ok {
-		return nil
-	}
-	buildObj := qualifiedIdentObject(info, buildCall.Fun)
+	buildObj := qualifiedIdentObject(info, call.Fun)
 	if !isWireImport(buildObj.Pkg().Path()) || buildObj.Name() != "Build" {
 		return nil
 	}
-	return buildCall
+	return call
 }
 
 func isWireImport(path string) bool {
