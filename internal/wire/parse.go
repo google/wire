@@ -375,6 +375,9 @@ func (oc *objectCache) processNewSet(pkg *loader.PackageInfo, call *ast.CallExpr
 	if err != nil {
 		return nil, err
 	}
+	if err := verifyAcyclic(pset.providerMap, oc.hasher); err != nil {
+		return nil, err
+	}
 	return pset, nil
 }
 
