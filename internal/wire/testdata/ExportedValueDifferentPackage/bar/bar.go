@@ -17,7 +17,7 @@ package bar
 import (
 	"os"
 
-	"github.com/google/go-cloud/wire"
+	"github.com/google/go-x-cloud/wire"
 )
 
 var Value = wire.Value(os.Stdout)

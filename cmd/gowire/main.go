@@ -30,7 +30,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/go-cloud/wire/internal/wire"
+	"github.com/google/go-x-cloud/wire/internal/wire"
 	"golang.org/x/tools/go/types/typeutil"
 )
 

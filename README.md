@@ -85,7 +85,7 @@ package foobarbaz
 
 import (
 	// ...
-	"github.com/google/go-cloud/wire"
+	"github.com/google/go-x-cloud/wire"
 )
 
 // ...
@@ -130,7 +130,7 @@ package main
 import (
 	"context"
 
-	"github.com/google/go-cloud/wire"
+	"github.com/google/go-x-cloud/wire"
 	"example.com/foobarbaz"
 )
 

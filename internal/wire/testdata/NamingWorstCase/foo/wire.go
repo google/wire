@@ -19,7 +19,7 @@ package main
 import (
 	stdcontext "context"
 
-	"github.com/google/go-cloud/wire"
+	"github.com/google/go-x-cloud/wire"
 )
 
 func inject(context stdcontext.Context, err struct{}) (context, error) {
