@@ -18,6 +18,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"go/build"
 	"go/token"
@@ -68,9 +69,10 @@ func generate(pkg string) error {
 	if err != nil {
 		return err
 	}
-	out, err := wire.Generate(&build.Default, wd, pkg)
-	if err != nil {
-		return err
+	out, errs := wire.Generate(&build.Default, wd, pkg)
+	if len(errs) > 0 {
+		logErrors(errs)
+		return errors.New("generate failed")
 	}
 	if len(out) == 0 {
 		// No Wire directives, don't write anything.
@@ -94,55 +96,58 @@ func show(pkgs ...string) error {
 	if err != nil {
 		return err
 	}
-	info, err := wire.Load(&build.Default, wd, pkgs)
-	if err != nil {
-		return err
-	}
-	keys := make([]wire.ProviderSetID, 0, len(info.Sets))
-	for k := range info.Sets {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].ImportPath == keys[j].ImportPath {
-			return keys[i].VarName < keys[j].VarName
+	info, errs := wire.Load(&build.Default, wd, pkgs)
+	if info != nil {
+		keys := make([]wire.ProviderSetID, 0, len(info.Sets))
+		for k := range info.Sets {
+			keys = append(keys, k)
 		}
-		return keys[i].ImportPath < keys[j].ImportPath
-	})
-	// ANSI color codes.
-	// TODO(light): Possibly use github.com/fatih/color?
-	const (
-		reset   = "\x1b[0m"
-		redBold = "\x1b[0;1;31m"
-		blue    = "\x1b[0;34m"
-		green   = "\x1b[0;32m"
-	)
-	for i, k := range keys {
-		if i > 0 {
-			fmt.Println()
-		}
-		outGroups, imports := gather(info, k)
-		fmt.Printf("%s%s%s\n", redBold, k, reset)
-		for _, imp := range sortSet(imports) {
-			fmt.Printf("\t%s\n", imp)
-		}
-		for i := range outGroups {
-			fmt.Printf("%sOutputs given %s:%s\n", blue, outGroups[i].name, reset)
-			out := make(map[string]token.Pos, outGroups[i].outputs.Len())
-			outGroups[i].outputs.Iterate(func(t types.Type, v interface{}) {
-				switch v := v.(type) {
-				case *wire.Provider:
-					out[types.TypeString(t, nil)] = v.Pos
-				case *wire.Value:
-					out[types.TypeString(t, nil)] = v.Pos
-				default:
-					panic("unreachable")
+		sort.Slice(keys, func(i, j int) bool {
+			if keys[i].ImportPath == keys[j].ImportPath {
+				return keys[i].VarName < keys[j].VarName
+			}
+			return keys[i].ImportPath < keys[j].ImportPath
+		})
+		// ANSI color codes.
+		// TODO(light): Possibly use github.com/fatih/color?
+		const (
+			reset   = "\x1b[0m"
+			redBold = "\x1b[0;1;31m"
+			blue    = "\x1b[0;34m"
+			green   = "\x1b[0;32m"
+		)
+		for i, k := range keys {
+			if i > 0 {
+				fmt.Println()
+			}
+			outGroups, imports := gather(info, k)
+			fmt.Printf("%s%s%s\n", redBold, k, reset)
+			for _, imp := range sortSet(imports) {
+				fmt.Printf("\t%s\n", imp)
+			}
+			for i := range outGroups {
+				fmt.Printf("%sOutputs given %s:%s\n", blue, outGroups[i].name, reset)
+				out := make(map[string]token.Pos, outGroups[i].outputs.Len())
+				outGroups[i].outputs.Iterate(func(t types.Type, v interface{}) {
+					switch v := v.(type) {
+					case *wire.Provider:
+						out[types.TypeString(t, nil)] = v.Pos
+					case *wire.Value:
+						out[types.TypeString(t, nil)] = v.Pos
+					default:
+						panic("unreachable")
+					}
+				})
+				for _, t := range sortSet(out) {
+					fmt.Printf("\t%s%s%s\n", green, t, reset)
+					fmt.Printf("\t\tat %v\n", info.Fset.Position(out[t]))
 				}
-			})
-			for _, t := range sortSet(out) {
-				fmt.Printf("\t%s%s%s\n", green, t, reset)
-				fmt.Printf("\t\tat %v\n", info.Fset.Position(out[t]))
 			}
 		}
+	}
+	if len(errs) > 0 {
+		logErrors(errs)
+		return errors.New("error loading packages")
 	}
 	return nil
 }
@@ -327,4 +332,10 @@ func sortSet(set interface{}) []string {
 func formatProviderSetName(importPath, varName string) string {
 	// Since varName is an identifier, it doesn't make sense to quote.
 	return strconv.Quote(importPath) + "." + varName
+}
+
+func logErrors(errs []error) {
+	for _, err := range errs {
+		fmt.Fprintln(os.Stderr, strings.Replace(err.Error(), "\n", "\n\t", -1))
+	}
 }

@@ -144,8 +144,9 @@ type Value struct {
 }
 
 // Load finds all the provider sets in the given packages, as well as
-// the provider sets' transitive dependencies.
-func Load(bctx *build.Context, wd string, pkgs []string) (*Info, error) {
+// the provider sets' transitive dependencies. It may return both an error
+// and Info.
+func Load(bctx *build.Context, wd string, pkgs []string) (*Info, []error) {
 	// TODO(light): Stop errors from printing to stderr.
 	conf := &loader.Config{
 		Build:               bctx,
@@ -157,7 +158,7 @@ func Load(bctx *build.Context, wd string, pkgs []string) (*Info, error) {
 	}
 	prog, err := conf.Load()
 	if err != nil {
-		return nil, fmt.Errorf("load: %v", err)
+		return nil, []error{fmt.Errorf("load: %v", err)}
 	}
 	info := &Info{
 		Fset: prog.Fset,

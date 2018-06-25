@@ -38,10 +38,10 @@ import (
 
 // Generate performs dependency injection for a single package,
 // returning the gofmt'd Go source code.
-func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
+func Generate(bctx *build.Context, wd string, pkg string) ([]byte, []error) {
 	mainPkg, err := bctx.Import(pkg, wd, build.FindOnly)
 	if err != nil {
-		return nil, fmt.Errorf("load: %v", err)
+		return nil, []error{fmt.Errorf("load: %v", err)}
 	}
 	// TODO(light): Stop errors from printing to stderr.
 	conf := &loader.Config{
@@ -59,17 +59,17 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 
 	prog, err := conf.Load()
 	if err != nil {
-		return nil, fmt.Errorf("load: %v", err)
+		return nil, []error{fmt.Errorf("load: %v", err)}
 	}
 	if len(prog.InitialPackages()) != 1 {
 		// This is more of a violated precondition than anything else.
-		return nil, fmt.Errorf("load: got %d packages", len(prog.InitialPackages()))
+		return nil, []error{fmt.Errorf("load: got %d packages", len(prog.InitialPackages()))}
 	}
 	pkgInfo := prog.InitialPackages()[0]
 	g := newGen(prog, pkgInfo.Pkg.Path())
 	injectorFiles, err := generateInjectors(g, pkgInfo)
 	if err != nil {
-		return nil, err
+		return nil, []error{err}
 	}
 	copyNonInjectorDecls(g, injectorFiles, &pkgInfo.Info)
 	goSrc := g.frame()
@@ -77,7 +77,7 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, error) {
 	if err != nil {
 		// This is likely a bug from a poorly generated source file.
 		// Return an error and the unformatted source.
-		return goSrc, err
+		return goSrc, []error{err}
 	}
 	return fmtSrc, nil
 }

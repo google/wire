@@ -69,17 +69,17 @@ func TestWire(t *testing.T) {
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
 				bctx := test.buildContext()
-				gen, err := Generate(bctx, wd, test.pkg)
+				gen, errs := Generate(bctx, wd, test.pkg)
 				if len(gen) > 0 {
 					defer t.Logf("wire_gen.go:\n%s", gen)
 				}
-				if err != nil {
+				if len(errs) > 0 {
 					if !test.wantError {
-						t.Fatalf("wirego: %v", err)
+						t.Fatalf("wirego: %v", errs)
 					}
 					return
 				}
-				if err == nil && test.wantError {
+				if len(errs) == 0 && test.wantError {
 					t.Fatal("wirego succeeded; want error")
 				}
 
@@ -133,15 +133,15 @@ func TestWire(t *testing.T) {
 			}
 			t.Run(test.name, func(t *testing.T) {
 				bctx := test.buildContext()
-				gold, err := Generate(bctx, wd, test.pkg)
-				if err != nil {
-					t.Fatal("wirego:", err)
+				gold, errs := Generate(bctx, wd, test.pkg)
+				if len(errs) > 0 {
+					t.Fatal("wirego:", errs)
 				}
 				goldstr := string(gold)
 				for i := 0; i < runs-1; i++ {
-					out, err := Generate(bctx, wd, test.pkg)
-					if err != nil {
-						t.Fatal("wirego (on subsequent run):", err)
+					out, errs := Generate(bctx, wd, test.pkg)
+					if len(errs) > 0 {
+						t.Fatal("wirego (on subsequent run):", errs)
 					}
 					if !bytes.Equal(gold, out) {
 						t.Fatalf("wirego output differs when run repeatedly on same input:\n%s", diff(goldstr, string(out)))
