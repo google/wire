@@ -17,10 +17,10 @@ package main
 import "fmt"
 
 func main() {
-	// Value should be deferred until function call.
+	// Mutating value; value should have been stored at package initialization.
 	msg = "Hello, World!"
 
 	fmt.Println(injectedMessage())
 }
 
-var msg string
+var msg string = "Package init"

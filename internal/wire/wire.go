@@ -151,6 +151,7 @@ type gen struct {
 	currPackage string
 	buf         bytes.Buffer
 	imports     map[string]string
+	values      map[ast.Expr]string
 	prog        *loader.Program // for positions and determining package names
 }
 
@@ -158,6 +159,7 @@ func newGen(prog *loader.Program, pkg string) *gen {
 	return &gen{
 		currPackage: pkg,
 		imports:     make(map[string]string),
+		values:      make(map[ast.Expr]string),
 		prog:        prog,
 	}
 }
@@ -207,6 +209,12 @@ func (g *gen) inject(name string, sig *types.Signature, set *ProviderSet) error 
 	if err != nil {
 		return err
 	}
+	type pendingVar struct {
+		name     string
+		expr     ast.Expr
+		typeInfo *types.Info
+	}
+	var pendingVars []pendingVar
 	for i := range calls {
 		c := &calls[i]
 		if c.hasCleanup && !injectSig.cleanup {
@@ -220,6 +228,16 @@ func (g *gen) inject(name string, sig *types.Signature, set *ProviderSet) error 
 				// TODO(light): Display line number of value expression.
 				ts := types.TypeString(c.out, nil)
 				return fmt.Errorf("inject %s: value %s can't be used: %v", name, ts, err)
+			}
+			if g.values[c.valueExpr] == "" {
+				t := c.valueTypeInfo.TypeOf(c.valueExpr)
+				name := disambiguate("_wire"+export(typeVariableName(t))+"Value", g.nameInFileScope)
+				g.values[c.valueExpr] = name
+				pendingVars = append(pendingVars, pendingVar{
+					name:     name,
+					expr:     c.valueExpr,
+					typeInfo: c.valueTypeInfo,
+				})
 			}
 		}
 	}
@@ -235,6 +253,15 @@ func (g *gen) inject(name string, sig *types.Signature, set *ProviderSet) error 
 		errVar:  disambiguate("err", g.nameInFileScope),
 		discard: false,
 	})
+	if len(pendingVars) > 0 {
+		g.p("var (\n")
+		for _, pv := range pendingVars {
+			g.p("\t%s = ", pv.name)
+			g.writeAST(pv.typeInfo, pv.expr)
+			g.p("\n")
+		}
+		g.p(")\n\n")
+	}
 	return nil
 }
 
@@ -398,6 +425,11 @@ func (g *gen) nameInFileScope(name string) bool {
 			return true
 		}
 	}
+	for _, other := range g.values {
+		if other == name {
+			return true
+		}
+	}
 	_, obj := g.prog.Package(g.currPackage).Pkg.Scope().LookupParent(name, 0)
 	return obj != nil
 }
@@ -434,7 +466,7 @@ func injectPass(name string, params *types.Tuple, injectSig outputSignature, cal
 		pi := params.At(i)
 		a := pi.Name()
 		if a == "" || a == "_" {
-			a = typeVariableName(pi.Type())
+			a = unexport(typeVariableName(pi.Type()))
 			if a == "" {
 				a = "arg"
 			}
@@ -454,7 +486,7 @@ func injectPass(name string, params *types.Tuple, injectSig outputSignature, cal
 	}
 	for i := range calls {
 		c := &calls[i]
-		lname := typeVariableName(c.out)
+		lname := unexport(typeVariableName(c.out))
 		if lname == "" {
 			lname = "v"
 		}
@@ -553,10 +585,7 @@ func (ig *injectorGen) structProviderCall(lname string, c *call) {
 }
 
 func (ig *injectorGen) valueExpr(lname string, c *call) {
-	ig.p("\t%s", lname)
-	ig.p(" := ")
-	ig.writeAST(c.valueTypeInfo, c.valueExpr)
-	ig.p("\n")
+	ig.p("\t%s := %s\n", lname, ig.g.values[c.valueExpr])
 }
 
 // nameInInjector reports whether name collides with any other identifier
@@ -626,21 +655,28 @@ func zeroValue(t types.Type, qf types.Qualifier) string {
 }
 
 // typeVariableName invents a variable name derived from the type name
-// or returns the empty string if one could not be found.
+// or returns the empty string if one could not be found. There are no
+// guarantees about whether the name is exported or unexported: call
+// export() or unexport() to convert.
 func typeVariableName(t types.Type) string {
 	if p, ok := t.(*types.Pointer); ok {
 		t = p.Elem()
 	}
-	tn, ok := t.(*types.Named)
-	if !ok {
-		return ""
+	switch t := t.(type) {
+	case *types.Basic:
+		return t.Name()
+	case *types.Named:
+		// TODO(light): Include package name when appropriate.
+		return t.Obj().Name()
 	}
-	// TODO(light): Include package name when appropriate.
-	return unexport(tn.Obj().Name())
+	return ""
 }
 
 // unexport converts a name that is potentially exported to an unexported name.
 func unexport(name string) string {
+	if name == "" {
+		return ""
+	}
 	r, sz := utf8.DecodeRuneInString(name)
 	if !unicode.IsUpper(r) {
 		// foo -> foo
@@ -666,6 +702,23 @@ func unexport(name string) string {
 		r, sz = r2, sz2
 	}
 	sbuf.WriteString(name[i:])
+	return sbuf.String()
+}
+
+// export converts a name that is potentially unexported to an exported name.
+func export(name string) string {
+	if name == "" {
+		return ""
+	}
+	r, sz := utf8.DecodeRuneInString(name)
+	if unicode.IsUpper(r) {
+		// Foo -> Foo
+		return name
+	}
+	// fooBar -> FooBar
+	sbuf := new(strings.Builder)
+	sbuf.WriteRune(unicode.ToUpper(r))
+	sbuf.WriteString(name[sz:])
 	return sbuf.String()
 }
 

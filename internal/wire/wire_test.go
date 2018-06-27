@@ -157,6 +157,7 @@ func TestUnexport(t *testing.T) {
 		name string
 		want string
 	}{
+		{"", ""},
 		{"a", "a"},
 		{"ab", "ab"},
 		{"A", "a"},
@@ -175,6 +176,36 @@ func TestUnexport(t *testing.T) {
 	for _, test := range tests {
 		if got := unexport(test.name); got != test.want {
 			t.Errorf("unexport(%q) = %q; want %q", test.name, got, test.want)
+		}
+	}
+}
+
+func TestExport(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"", ""},
+		{"a", "A"},
+		{"ab", "Ab"},
+		{"A", "A"},
+		{"AB", "AB"},
+		{"A_", "A_"},
+		{"ABc", "ABc"},
+		{"ABC", "ABC"},
+		{"AB_", "AB_"},
+		{"foo", "Foo"},
+		{"Foo", "Foo"},
+		{"HTTPClient", "HTTPClient"},
+		{"httpClient", "HttpClient"},
+		{"IFace", "IFace"},
+		{"iFace", "IFace"},
+		{"SNAKE_CASE", "SNAKE_CASE"},
+		{"HTTP", "HTTP"},
+	}
+	for _, test := range tests {
+		if got := export(test.name); got != test.want {
+			t.Errorf("export(%q) = %q; want %q", test.name, got, test.want)
 		}
 	}
 }
