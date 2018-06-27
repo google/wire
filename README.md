@@ -9,6 +9,14 @@ initialization.
 
 [dependency injection]: https://en.wikipedia.org/wiki/Dependency_injection
 
+## Installing
+
+Install `gowire` by running the following inside the Go X Cloud repository:
+
+```shell
+vgo install github.com/google/go-x-cloud/wire/cmd/gowire
+```
+
 ## Basics
 
 Wire has two core concepts: providers and injectors.

@@ -14,7 +14,7 @@
 
 // gowire is a compile-time dependency injection tool.
 //
-// See README.md for an overview.
+// For an overview, see https://github.com/google/go-x-cloud/blob/master/wire/README.md
 package main
 
 import (
