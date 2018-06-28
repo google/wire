@@ -1,1 +1,2 @@
 ERROR
+unexported identifier privateMsg
