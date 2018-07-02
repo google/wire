@@ -18,7 +18,7 @@ package main
 
 import (
 	"bar"
-	"github.com/google/go-x-cloud/wire"
+	"github.com/google/go-cloud/wire"
 )
 
 func injectedMessage() string {

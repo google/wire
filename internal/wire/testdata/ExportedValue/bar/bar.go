@@ -14,7 +14,7 @@
 
 package bar
 
-import "github.com/google/go-x-cloud/wire"
+import "github.com/google/go-cloud/wire"
 
 var Value = wire.Value(PublicMsg)
 

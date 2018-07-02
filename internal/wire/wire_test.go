@@ -309,7 +309,7 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 		out = nil
 	}
 	goFiles := map[string][]byte{
-		"github.com/google/go-x-cloud/wire/wire.go": wireGoSrc,
+		"github.com/google/go-cloud/wire/wire.go": wireGoSrc,
 	}
 	err = filepath.Walk(root, func(src string, info os.FileInfo, err error) error {
 		if err != nil {

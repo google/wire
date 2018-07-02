@@ -11,10 +11,10 @@ initialization.
 
 ## Installing
 
-Install `gowire` by running the following inside the Go X Cloud repository:
+Install `gowire` by running the following inside the Go Cloud repository:
 
 ```shell
-vgo install github.com/google/go-x-cloud/wire/cmd/gowire
+vgo install github.com/google/go-cloud/wire/cmd/gowire
 ```
 
 ## Basics
@@ -93,7 +93,7 @@ package foobarbaz
 
 import (
 	// ...
-	"github.com/google/go-x-cloud/wire"
+	"github.com/google/go-cloud/wire"
 )
 
 // ...
@@ -138,7 +138,7 @@ package main
 import (
 	"context"
 
-	"github.com/google/go-x-cloud/wire"
+	"github.com/google/go-cloud/wire"
 	"example.com/foobarbaz"
 )
 

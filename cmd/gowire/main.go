@@ -14,7 +14,7 @@
 
 // gowire is a compile-time dependency injection tool.
 //
-// For an overview, see https://github.com/google/go-x-cloud/blob/master/wire/README.md
+// For an overview, see https://github.com/google/go-cloud/blob/master/wire/README.md
 package main
 
 import (
@@ -31,7 +31,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/go-x-cloud/wire/internal/wire"
+	"github.com/google/go-cloud/wire/internal/wire"
 	"golang.org/x/tools/go/types/typeutil"
 )
 
