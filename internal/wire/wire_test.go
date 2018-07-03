@@ -67,6 +67,7 @@ func TestWire(t *testing.T) {
 			t.Skip("go toolchain not available:", err)
 		}
 		for _, test := range tests {
+			test := test
 			t.Run(test.name, func(t *testing.T) {
 				t.Parallel()
 				bctx := test.buildContext()
@@ -137,6 +138,7 @@ func TestWire(t *testing.T) {
 			if test.wantError {
 				continue
 			}
+			test := test
 			t.Run(test.name, func(t *testing.T) {
 				t.Parallel()
 				bctx := test.buildContext()
