@@ -21,5 +21,6 @@ import (
 )
 
 func injectedMessage() string {
-	panic(wire.Build(wire.Value("Hello, World!")))
+	wire.Build(wire.Value("Hello, World!"))
+	return ""
 }

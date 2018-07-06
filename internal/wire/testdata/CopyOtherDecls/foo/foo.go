@@ -35,5 +35,6 @@ func provideMessage() string {
 }
 
 func injectedMessage() string {
-	panic(wire.Build(provideMessage))
+	wire.Build(provideMessage)
+	return ""
 }

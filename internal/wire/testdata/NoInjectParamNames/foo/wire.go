@@ -26,5 +26,6 @@ import (
 // parameter names on the inject stub.
 
 func inject(stdcontext.Context, struct{}) (context, error) {
-	panic(wire.Build(provide))
+	wire.Build(provide)
+	return context{}, nil
 }

@@ -21,5 +21,6 @@ import (
 )
 
 func injectBar() (*Bar, func()) {
-	panic(wire.Build(provideFoo, provideBar))
+	wire.Build(provideFoo, provideBar)
+	return nil, nil
 }

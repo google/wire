@@ -21,5 +21,6 @@ import (
 )
 
 func injectBaz() (Baz, func(), error) {
-	panic(wire.Build(provideFoo, provideBar, provideBaz))
+	wire.Build(provideFoo, provideBar, provideBaz)
+	return 0, nil, nil
 }

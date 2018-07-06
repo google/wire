@@ -17,10 +17,11 @@
 package main
 
 import (
-	"github.com/google/go-cloud/wire"
 	"foo"
+	"github.com/google/go-cloud/wire"
 )
 
 func injectFooer() foo.Fooer {
-	panic(wire.Build(Set))
+	wire.Build(Set)
+	return nil
 }
