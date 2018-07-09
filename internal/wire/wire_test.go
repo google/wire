@@ -598,7 +598,7 @@ func parseGoldenOutput(out []byte) (errorStrings []string, wantError bool) {
 	// Skip past first line.
 	out = out[len(errorPrefix):]
 	// Remove any leading or trailing blank lines.
-	out = bytes.Trim(out[len(errorPrefix):], "\n")
+	out = bytes.Trim(out, "\n")
 	// Split lines.
 	return strings.Split(string(out), "\n"), true
 }
