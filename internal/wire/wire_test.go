@@ -34,10 +34,6 @@ import (
 )
 
 func TestWire(t *testing.T) {
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
 	const testRoot = "testdata"
 	testdataEnts, err := ioutil.ReadDir(testRoot) // ReadDir sorts by name.
 	if err != nil {
@@ -61,6 +57,7 @@ func TestWire(t *testing.T) {
 		}
 		tests = append(tests, test)
 	}
+	wd := filepath.Join(magicGOPATH(), "src")
 
 	t.Run("Generate", func(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(build.Default.GOROOT, "bin", "go")); err != nil {
@@ -70,6 +67,8 @@ func TestWire(t *testing.T) {
 			test := test
 			t.Run(test.name, func(t *testing.T) {
 				t.Parallel()
+
+				// Run gowire from a fake build context.
 				bctx := test.buildContext()
 				gen, errs := Generate(bctx, wd, test.pkg)
 				if len(gen) > 0 {
@@ -93,6 +92,14 @@ func TestWire(t *testing.T) {
 					t.Fatal("wirego succeeded; want error")
 				}
 
+				// Find the absolute import path, since test.pkg may be a relative
+				// import path.
+				genPkg, err := bctx.Import(test.pkg, wd, build.FindOnly)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				// Run a `go build` with the generated output.
 				gopath, err := ioutil.TempDir("", "wire_test")
 				if err != nil {
 					t.Fatal(err)
@@ -102,7 +109,7 @@ func TestWire(t *testing.T) {
 					t.Fatal(err)
 				}
 				if len(gen) > 0 {
-					genPath := filepath.Join(gopath, "src", filepath.FromSlash(test.pkg), "wire_gen.go")
+					genPath := filepath.Join(gopath, "src", filepath.FromSlash(genPkg.ImportPath), "wire_gen.go")
 					if err := ioutil.WriteFile(genPath, gen, 0666); err != nil {
 						t.Fatal(err)
 					}
@@ -118,9 +125,12 @@ func TestWire(t *testing.T) {
 					BuildTags:   bctx.BuildTags,
 					ReleaseTags: bctx.ReleaseTags,
 				}
-				if err := runGo(realBuildCtx, "build", "-o", testExePath, test.pkg); err != nil {
+				if err := runGo(realBuildCtx, "build", "-o", testExePath, genPkg.ImportPath); err != nil {
 					t.Fatal("build:", err)
 				}
+
+				// Run the resulting program and compare its output to the expected
+				// output.
 				out, err := exec.Command(testExePath).Output()
 				if err != nil {
 					t.Error("run compiled program:", err)
