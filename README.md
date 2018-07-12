@@ -388,3 +388,59 @@ func NewGreeter(ctx context.Context, opts *Options) (*Greeter, error) {
 
 var GreeterSet = wire.NewSet(Options{}, NewGreeter)
 ```
+
+### Evolving Provider Sets
+
+When creating a provider set for use in a library, the only changes you can make
+without breaking compatibility are:
+
+-  Change which provider a provider set uses to provide a specific output, as
+   long as it does not introduce a new input to the provider set. It may remove
+   inputs. However, note that existing injectors will use the old provider until
+   they are regenerated.
+-  Introduce a new output type into the provider set, but only if the type itself
+   is newly added. If the type is not new, it is possible that some injector
+   already has the output type included, which would cause a conflict.
+
+All other changes are not safe. This includes:
+
+-  Requiring a new input in the provider set.
+-  Removing an output type from a provider set.
+-  Adding an existing output type into the provider set.
+
+Instead of making one of these breaking changes, consider adding a new provider
+set.
+
+As an example, if you have a provider set like this:
+
+```go
+var GreeterSet = wire.NewSet(NewStdoutGreeter)
+
+func DefaultGreeter(ctx context.Context) *Greeter {
+	// ...
+}
+
+func NewStdoutGreeter(ctx context.Context, msgs []Message) *Greeter {
+	// ...
+}
+
+func NewGreeter(ctx context.Context, w io.Writer, msgs []Message) (*Greeter, error) {
+	// ...
+}
+```
+
+You may:
+
+-  Use `DefaultGreeter` instead of `NewStdoutGreeter` in `GreeterSet`.
+-  Create a new type `T` and add a provider for `T` to `GreeterSet`, as long as
+   `T` is introduced in the same commit/release as the provider is added.
+
+You may not:
+
+-  Use `NewGreeter` instead of `NewStdoutGreeter` in `GreeterSet`. This both
+   adds an input type (`io.Writer`) and requires injectors to return an `error`
+   where the provider of `*Greeter` did not require this before.
+-  Remove `NewStdoutGreeter` from `GreeterSet`. Injectors depending on
+   `*Greeter` will be broken.
+-  Add a provider for `io.Writer` to `GreeterSet`. Injectors might already have
+   a provider for `io.Writer` which might conflict with this one.
