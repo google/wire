@@ -207,7 +207,7 @@ func (id ProviderSetID) String() string {
 // objectCache is a lazily evaluated mapping of objects to Wire structures.
 type objectCache struct {
 	prog    *loader.Program
-	objects map[objRef]interface{} // *Provider, *ProviderSet, *IfaceBinding, or *Value
+	objects map[objRef]objCacheEntry
 	hasher  typeutil.Hasher
 }
 
@@ -216,10 +216,15 @@ type objRef struct {
 	name       string
 }
 
+type objCacheEntry struct {
+	val  interface{} // *Provider, *ProviderSet, *IfaceBinding, or *Value
+	errs []error
+}
+
 func newObjectCache(prog *loader.Program) *objectCache {
 	return &objectCache{
 		prog:    prog,
-		objects: make(map[objRef]interface{}),
+		objects: make(map[objRef]objCacheEntry),
 		hasher:  typeutil.MakeHasher(),
 	}
 }
@@ -227,22 +232,25 @@ func newObjectCache(prog *loader.Program) *objectCache {
 // get converts a Go object into a Wire structure. It may return a
 // *Provider, a structProviderPair, an *IfaceBinding, a *ProviderSet,
 // or a *Value.
-func (oc *objectCache) get(obj types.Object) (interface{}, error) {
+func (oc *objectCache) get(obj types.Object) (val interface{}, errs []error) {
 	ref := objRef{
 		importPath: obj.Pkg().Path(),
 		name:       obj.Name(),
 	}
-	if val, cached := oc.objects[ref]; cached {
-		if val == nil {
-			return nil, fmt.Errorf("%v is not a provider or a provider set", obj)
-		}
-		return val, nil
+	if ent, cached := oc.objects[ref]; cached {
+		return ent.val, append([]error(nil), ent.errs...)
 	}
+	defer func() {
+		oc.objects[ref] = objCacheEntry{
+			val:  val,
+			errs: append([]error(nil), errs...),
+		}
+	}()
 	switch obj := obj.(type) {
 	case *types.Var:
 		spec := oc.varDecl(obj)
 		if len(spec.Values) == 0 {
-			return nil, fmt.Errorf("%v is not a provider or a provider set", obj)
+			return nil, []error{fmt.Errorf("%v is not a provider or a provider set", obj)}
 		}
 		var i int
 		for i = range spec.Names {
@@ -252,16 +260,9 @@ func (oc *objectCache) get(obj types.Object) (interface{}, error) {
 		}
 		return oc.processExpr(oc.prog.Package(obj.Pkg().Path()), spec.Values[i])
 	case *types.Func:
-		p, err := processFuncProvider(oc.prog.Fset, obj)
-		if err != nil {
-			oc.objects[ref] = nil
-			return nil, err
-		}
-		oc.objects[ref] = p
-		return p, nil
+		return processFuncProvider(oc.prog.Fset, obj)
 	default:
-		oc.objects[ref] = nil
-		return nil, fmt.Errorf("%v is not a provider or a provider set", obj)
+		return nil, []error{fmt.Errorf("%v is not a provider or a provider set", obj)}
 	}
 }
 
@@ -288,55 +289,63 @@ func (oc *objectCache) varDecl(obj *types.Var) *ast.ValueSpec {
 // processExpr converts an expression into a Wire structure. It may
 // return a *Provider, a structProviderPair, an *IfaceBinding, a
 // *ProviderSet, or a *Value.
-func (oc *objectCache) processExpr(pkg *loader.PackageInfo, expr ast.Expr) (interface{}, error) {
+func (oc *objectCache) processExpr(pkg *loader.PackageInfo, expr ast.Expr) (interface{}, []error) {
 	exprPos := oc.prog.Fset.Position(expr.Pos())
 	expr = astutil.Unparen(expr)
 	if obj := qualifiedIdentObject(&pkg.Info, expr); obj != nil {
 		item, err := oc.get(obj)
 		if err != nil {
-			return nil, fmt.Errorf("%v: %v", exprPos, err)
+			return nil, []error{fmt.Errorf("%v: %v", exprPos, err)}
 		}
 		return item, nil
 	}
 	if call, ok := expr.(*ast.CallExpr); ok {
 		fnObj := qualifiedIdentObject(&pkg.Info, call.Fun)
 		if fnObj == nil || !isWireImport(fnObj.Pkg().Path()) {
-			return nil, fmt.Errorf("%v: unknown pattern", exprPos)
+			return nil, []error{fmt.Errorf("%v: unknown pattern", exprPos)}
 		}
 		switch fnObj.Name() {
 		case "NewSet":
-			pset, err := oc.processNewSet(pkg, call)
-			if err != nil {
-				return nil, fmt.Errorf("%v: %v", exprPos, err)
+			pset, errs := oc.processNewSet(pkg, call)
+			if len(errs) > 0 {
+				errs = append([]error(nil), errs...)
+				for i := range errs {
+					errs[i] = fmt.Errorf("%v: %v", exprPos, errs[i])
+				}
+				return nil, errs
 			}
 			return pset, nil
 		case "Bind":
 			b, err := processBind(oc.prog.Fset, &pkg.Info, call)
 			if err != nil {
-				return nil, fmt.Errorf("%v: %v", exprPos, err)
+				return nil, []error{fmt.Errorf("%v: %v", exprPos, err)}
 			}
 			return b, nil
 		case "Value":
 			v, err := processValue(oc.prog.Fset, &pkg.Info, call)
 			if err != nil {
-				return nil, fmt.Errorf("%v: %v", exprPos, err)
+				return nil, []error{fmt.Errorf("%v: %v", exprPos, err)}
 			}
 			return v, nil
 		default:
-			return nil, fmt.Errorf("%v: unknown pattern", exprPos)
+			return nil, []error{fmt.Errorf("%v: unknown pattern", exprPos)}
 		}
 	}
 	if tn := structArgType(&pkg.Info, expr); tn != nil {
-		p, err := processStructProvider(oc.prog.Fset, tn)
-		if err != nil {
-			return nil, fmt.Errorf("%v: %v", exprPos, err)
+		p, errs := processStructProvider(oc.prog.Fset, tn)
+		if len(errs) > 0 {
+			errs = append([]error(nil), errs...)
+			for i := range errs {
+				errs[i] = fmt.Errorf("%v: %v", exprPos, errs[i])
+			}
+			return nil, errs
 		}
 		ptrp := new(Provider)
 		*ptrp = *p
 		ptrp.Out = types.NewPointer(p.Out)
 		return structProviderPair{p, ptrp}, nil
 	}
-	return nil, fmt.Errorf("%v: unknown pattern", exprPos)
+	return nil, []error{fmt.Errorf("%v: unknown pattern", exprPos)}
 }
 
 type structProviderPair struct {
@@ -344,7 +353,7 @@ type structProviderPair struct {
 	ptrProvider *Provider
 }
 
-func (oc *objectCache) processNewSet(pkg *loader.PackageInfo, call *ast.CallExpr) (*ProviderSet, error) {
+func (oc *objectCache) processNewSet(pkg *loader.PackageInfo, call *ast.CallExpr) (*ProviderSet, []error) {
 	// Assumes that call.Fun is wire.NewSet or wire.Build.
 
 	pset := &ProviderSet{
@@ -371,13 +380,13 @@ func (oc *objectCache) processNewSet(pkg *loader.PackageInfo, call *ast.CallExpr
 			panic("unknown item type")
 		}
 	}
-	var err error
-	pset.providerMap, err = buildProviderMap(oc.prog.Fset, oc.hasher, pset)
-	if err != nil {
-		return nil, err
+	var errs []error
+	pset.providerMap, errs = buildProviderMap(oc.prog.Fset, oc.hasher, pset)
+	if len(errs) > 0 {
+		return nil, errs
 	}
-	if err := verifyAcyclic(pset.providerMap, oc.hasher); err != nil {
-		return nil, err
+	if errs := verifyAcyclic(pset.providerMap, oc.hasher); len(errs) > 0 {
+		return nil, errs
 	}
 	return pset, nil
 }
@@ -420,12 +429,12 @@ func qualifiedIdentObject(info *types.Info, expr ast.Expr) types.Object {
 }
 
 // processFuncProvider creates a provider for a function declaration.
-func processFuncProvider(fset *token.FileSet, fn *types.Func) (*Provider, error) {
+func processFuncProvider(fset *token.FileSet, fn *types.Func) (*Provider, []error) {
 	sig := fn.Type().(*types.Signature)
 	fpos := fn.Pos()
 	providerSig, err := funcOutput(sig)
 	if err != nil {
-		return nil, fmt.Errorf("%v: wrong signature for provider %s: %v", fset.Position(fpos), fn.Name(), err)
+		return nil, []error{fmt.Errorf("%v: wrong signature for provider %s: %v", fset.Position(fpos), fn.Name(), err)}
 	}
 	params := sig.Params()
 	provider := &Provider{
@@ -443,7 +452,7 @@ func processFuncProvider(fset *token.FileSet, fn *types.Func) (*Provider, error)
 		}
 		for j := 0; j < i; j++ {
 			if types.Identical(provider.Args[i].Type, provider.Args[j].Type) {
-				return nil, fmt.Errorf("%v: provider has multiple parameters of type %s", fset.Position(fpos), types.TypeString(provider.Args[j].Type, nil))
+				return nil, []error{fmt.Errorf("%v: provider has multiple parameters of type %s", fset.Position(fpos), types.TypeString(provider.Args[j].Type, nil))}
 			}
 		}
 	}
@@ -493,11 +502,11 @@ func funcOutput(sig *types.Signature) (outputSignature, error) {
 
 // processStructProvider creates a provider for a named struct type.
 // It only produces the non-pointer variant.
-func processStructProvider(fset *token.FileSet, typeName *types.TypeName) (*Provider, error) {
+func processStructProvider(fset *token.FileSet, typeName *types.TypeName) (*Provider, []error) {
 	out := typeName.Type()
 	st, ok := out.Underlying().(*types.Struct)
 	if !ok {
-		return nil, fmt.Errorf("%v does not name a struct", typeName)
+		return nil, []error{fmt.Errorf("%v does not name a struct", typeName)}
 	}
 
 	pos := typeName.Pos()
@@ -518,7 +527,7 @@ func processStructProvider(fset *token.FileSet, typeName *types.TypeName) (*Prov
 		provider.Fields[i] = f.Name()
 		for j := 0; j < i; j++ {
 			if types.Identical(provider.Args[i].Type, provider.Args[j].Type) {
-				return nil, fmt.Errorf("%v: provider struct has multiple fields of type %s", fset.Position(pos), types.TypeString(provider.Args[j].Type, nil))
+				return nil, []error{fmt.Errorf("%v: provider struct has multiple fields of type %s", fset.Position(pos), types.TypeString(provider.Args[j].Type, nil))}
 			}
 		}
 	}

@@ -79,11 +79,11 @@ type call struct {
 
 // solve finds the sequence of calls required to produce an output type
 // with an optional set of provided inputs.
-func solve(fset *token.FileSet, out types.Type, given []types.Type, set *ProviderSet) ([]call, error) {
+func solve(fset *token.FileSet, out types.Type, given []types.Type, set *ProviderSet) ([]call, []error) {
 	for i, g := range given {
 		for _, h := range given[:i] {
 			if types.Identical(g, h) {
-				return nil, fmt.Errorf("multiple inputs of the same type %s", types.TypeString(g, nil))
+				return nil, []error{fmt.Errorf("multiple inputs of the same type %s", types.TypeString(g, nil))}
 			}
 		}
 	}
@@ -95,11 +95,11 @@ func solve(fset *token.FileSet, out types.Type, given []types.Type, set *Provide
 		if pv := set.For(g); !pv.IsNil() {
 			switch {
 			case pv.IsProvider():
-				return nil, fmt.Errorf("input of %s conflicts with provider %s at %s",
-					types.TypeString(g, nil), pv.Provider().Name, fset.Position(pv.Provider().Pos))
+				return nil, []error{fmt.Errorf("input of %s conflicts with provider %s at %s",
+					types.TypeString(g, nil), pv.Provider().Name, fset.Position(pv.Provider().Pos))}
 			case pv.IsValue():
-				return nil, fmt.Errorf("input of %s conflicts with value at %s",
-					types.TypeString(g, nil), fset.Position(pv.Value().Pos))
+				return nil, []error{fmt.Errorf("input of %s conflicts with value at %s",
+					types.TypeString(g, nil), fset.Position(pv.Value().Pos))}
 			default:
 				panic("unknown return value from ProviderSet.For")
 			}
@@ -126,10 +126,10 @@ func solve(fset *token.FileSet, out types.Type, given []types.Type, set *Provide
 		switch pv := set.For(curr.t); {
 		case pv.IsNil():
 			if curr.from == nil {
-				return nil, fmt.Errorf("no provider found for %s (output of injector)", types.TypeString(curr.t, nil))
+				return nil, []error{fmt.Errorf("no provider found for %s (output of injector)", types.TypeString(curr.t, nil))}
 			}
 			// TODO(light): Give name of provider.
-			return nil, fmt.Errorf("no provider found for %s (required by provider of %s)", types.TypeString(curr.t, nil), types.TypeString(curr.from, nil))
+			return nil, []error{fmt.Errorf("no provider found for %s (required by provider of %s)", types.TypeString(curr.t, nil), types.TypeString(curr.from, nil))}
 		case pv.IsProvider():
 			p := pv.Provider()
 			if !types.Identical(p.Out, curr.t) {
@@ -210,7 +210,7 @@ func solve(fset *token.FileSet, out types.Type, given []types.Type, set *Provide
 
 // buildProviderMap creates the providerMap field for a given provider set.
 // The given provider set's providerMap field is ignored.
-func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *ProviderSet) (*typeutil.Map, error) {
+func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *ProviderSet) (*typeutil.Map, []error) {
 	providerMap := new(typeutil.Map)
 	providerMap.SetHasher(hasher)
 	setMap := new(typeutil.Map) // to *ProviderSet, for error messages
@@ -220,7 +220,7 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 	for _, imp := range set.Imports {
 		for _, k := range imp.providerMap.Keys() {
 			if providerMap.At(k) != nil {
-				return nil, bindingConflictError(fset, imp.Pos, k, setMap.At(k).(*ProviderSet))
+				return nil, []error{bindingConflictError(fset, imp.Pos, k, setMap.At(k).(*ProviderSet))}
 			}
 			providerMap.Set(k, imp.providerMap.At(k))
 			setMap.Set(k, imp)
@@ -230,14 +230,14 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 	// Process non-binding providers in new set.
 	for _, p := range set.Providers {
 		if providerMap.At(p.Out) != nil {
-			return nil, bindingConflictError(fset, p.Pos, p.Out, setMap.At(p.Out).(*ProviderSet))
+			return nil, []error{bindingConflictError(fset, p.Pos, p.Out, setMap.At(p.Out).(*ProviderSet))}
 		}
 		providerMap.Set(p.Out, p)
 		setMap.Set(p.Out, set)
 	}
 	for _, v := range set.Values {
 		if providerMap.At(v.Out) != nil {
-			return nil, bindingConflictError(fset, v.Pos, v.Out, setMap.At(v.Out).(*ProviderSet))
+			return nil, []error{bindingConflictError(fset, v.Pos, v.Out, setMap.At(v.Out).(*ProviderSet))}
 		}
 		providerMap.Set(v.Out, v)
 		setMap.Set(v.Out, set)
@@ -247,13 +247,13 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 	// ensure the concrete type is being provided.
 	for _, b := range set.Bindings {
 		if providerMap.At(b.Iface) != nil {
-			return nil, bindingConflictError(fset, b.Pos, b.Iface, setMap.At(b.Iface).(*ProviderSet))
+			return nil, []error{bindingConflictError(fset, b.Pos, b.Iface, setMap.At(b.Iface).(*ProviderSet))}
 		}
 		concrete := providerMap.At(b.Provided)
 		if concrete == nil {
 			pos := fset.Position(b.Pos)
 			typ := types.TypeString(b.Provided, nil)
-			return nil, fmt.Errorf("%v: no binding for %s", pos, typ)
+			return nil, []error{fmt.Errorf("%v: no binding for %s", pos, typ)}
 		}
 		providerMap.Set(b.Iface, concrete)
 		setMap.Set(b.Iface, set)
@@ -261,7 +261,7 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 	return providerMap, nil
 }
 
-func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) error {
+func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 	// We must visit every provider type inside provider map, but we don't
 	// have a well-defined starting point and there may be several
 	// distinct graphs. Thus, we start a depth-first search at every
@@ -297,7 +297,7 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) error {
 								fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.ImportPath, p.Name)
 							}
 							fmt.Fprintf(sb, "%s\n", types.TypeString(a, nil))
-							return errors.New(sb.String())
+							return []error{errors.New(sb.String())}
 						}
 					}
 					next := append(append([]types.Type(nil), curr...), a)
