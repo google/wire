@@ -43,10 +43,15 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, []error) {
 	if err != nil {
 		return nil, []error{fmt.Errorf("load: %v", err)}
 	}
-	// TODO(light): Stop errors from printing to stderr.
+	ec := new(errorCollector)
 	conf := &loader.Config{
 		Build: bctx,
 		Cwd:   wd,
+		TypeChecker: types.Config{
+			Error: func(err error) {
+				ec.add(err)
+			},
+		},
 		TypeCheckFuncBodies: func(path string) bool {
 			return path == mainPkg.ImportPath
 		},
@@ -71,8 +76,11 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, []error) {
 	conf.Import(pkg)
 
 	prog, err := conf.Load()
+	if len(ec.errors) > 0 {
+		return nil, ec.errors
+	}
 	if err != nil {
-		return nil, []error{fmt.Errorf("load: %v", err)}
+		return nil, []error{err}
 	}
 	if len(prog.InitialPackages()) != 1 {
 		// This is more of a violated precondition than anything else.
@@ -99,6 +107,7 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, []error) {
 func generateInjectors(g *gen, pkgInfo *loader.PackageInfo) (injectorFiles []*ast.File, _ []error) {
 	oc := newObjectCache(g.prog)
 	injectorFiles = make([]*ast.File, 0, len(pkgInfo.Files))
+	ec := new(errorCollector)
 	for _, f := range pkgInfo.Files {
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
@@ -118,23 +127,18 @@ func generateInjectors(g *gen, pkgInfo *loader.PackageInfo) (injectorFiles []*as
 			}
 			set, errs := oc.processNewSet(pkgInfo, buildCall)
 			if len(errs) > 0 {
-				position := g.prog.Fset.Position(fn.Pos())
-				errs = append([]error(nil), errs...)
-				for i := range errs {
-					errs[i] = fmt.Errorf("%v: %v", position, errs[i])
-				}
-				return nil, errs
+				ec.add(notePositionAll(g.prog.Fset.Position(fn.Pos()), errs)...)
+				continue
 			}
 			sig := pkgInfo.ObjectOf(fn.Name).Type().(*types.Signature)
-			if errs := g.inject(fn.Name.Name, sig, set); len(errs) > 0 {
-				position := g.prog.Fset.Position(fn.Pos())
-				errs = append([]error(nil), errs...)
-				for i := range errs {
-					errs[i] = fmt.Errorf("%v: %v", position, errs[i])
-				}
-				return nil, errs
+			if errs := g.inject(fn.Pos(), fn.Name.Name, sig, set); len(errs) > 0 {
+				ec.add(errs...)
+				continue
 			}
 		}
+	}
+	if len(ec.errors) > 0 {
+		return nil, ec.errors
 	}
 	return injectorFiles, nil
 }
@@ -218,10 +222,11 @@ func (g *gen) frame() []byte {
 }
 
 // inject emits the code for an injector.
-func (g *gen) inject(name string, sig *types.Signature, set *ProviderSet) []error {
+func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *ProviderSet) []error {
 	injectSig, err := funcOutput(sig)
 	if err != nil {
-		return []error{fmt.Errorf("inject %s: %v", name, err)}
+		return []error{notePosition(g.prog.Fset.Position(pos),
+			fmt.Errorf("inject %s: %v", name, err))}
 	}
 	params := sig.Params()
 	given := make([]types.Type, params.Len())
@@ -230,7 +235,12 @@ func (g *gen) inject(name string, sig *types.Signature, set *ProviderSet) []erro
 	}
 	calls, errs := solve(g.prog.Fset, injectSig.out, given, set)
 	if len(errs) > 0 {
-		return errs
+		return mapErrors(errs, func(e error) error {
+			if w, ok := e.(*wireErr); ok {
+				return notePosition(w.position, fmt.Errorf("inject %s: %v", name, w.error))
+			}
+			return notePosition(g.prog.Fset.Position(pos), fmt.Errorf("inject %s: %v", name, e))
+		})
 	}
 	type pendingVar struct {
 		name     string
@@ -238,19 +248,28 @@ func (g *gen) inject(name string, sig *types.Signature, set *ProviderSet) []erro
 		typeInfo *types.Info
 	}
 	var pendingVars []pendingVar
+	ec := new(errorCollector)
 	for i := range calls {
 		c := &calls[i]
 		if c.hasCleanup && !injectSig.cleanup {
-			return []error{fmt.Errorf("inject %s: provider for %s returns cleanup but injection does not return cleanup function", name, types.TypeString(c.out, nil))}
+			ts := types.TypeString(c.out, nil)
+			ec.add(notePosition(
+				g.prog.Fset.Position(pos),
+				fmt.Errorf("inject %s: provider for %s returns cleanup but injection does not return cleanup function", name, ts)))
 		}
 		if c.hasErr && !injectSig.err {
-			return []error{fmt.Errorf("inject %s: provider for %s returns error but injection not allowed to fail", name, types.TypeString(c.out, nil))}
+			ts := types.TypeString(c.out, nil)
+			ec.add(notePosition(
+				g.prog.Fset.Position(pos),
+				fmt.Errorf("inject %s: provider for %s returns error but injection not allowed to fail", name, ts)))
 		}
 		if c.kind == valueExpr {
 			if err := accessibleFrom(c.valueTypeInfo, c.valueExpr, g.currPackage); err != nil {
 				// TODO(light): Display line number of value expression.
 				ts := types.TypeString(c.out, nil)
-				return []error{fmt.Errorf("inject %s: value %s can't be used: %v", name, ts, err)}
+				ec.add(notePosition(
+					g.prog.Fset.Position(pos),
+					fmt.Errorf("inject %s: value %s can't be used: %v", name, ts, err)))
 			}
 			if g.values[c.valueExpr] == "" {
 				t := c.valueTypeInfo.TypeOf(c.valueExpr)
@@ -263,6 +282,9 @@ func (g *gen) inject(name string, sig *types.Signature, set *ProviderSet) []erro
 				})
 			}
 		}
+	}
+	if len(ec.errors) > 0 {
+		return ec.errors
 	}
 
 	// Perform one pass to collect all imports, followed by the real pass.

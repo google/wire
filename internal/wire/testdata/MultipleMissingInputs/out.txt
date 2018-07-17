@@ -1,0 +1,3 @@
+ERROR
+no provider found for foo.Foo
+no provider found for foo.Bar
