@@ -147,33 +147,21 @@ type Value struct {
 // the provider sets' transitive dependencies. It may return both errors
 // and Info.
 func Load(bctx *build.Context, wd string, pkgs []string) (*Info, []error) {
-	ec := new(errorCollector)
-	conf := &loader.Config{
-		Build: bctx,
-		Cwd:   wd,
-		TypeChecker: types.Config{
-			Error: func(err error) {
-				ec.add(err)
-			},
-		},
-		TypeCheckFuncBodies: func(string) bool { return false },
-	}
-	for _, p := range pkgs {
-		conf.Import(p)
-	}
-	prog, err := conf.Load()
-	if len(ec.errors) > 0 {
-		return nil, ec.errors
-	}
-	if err != nil {
-		return nil, []error{err}
+	prog, errs := load(bctx, wd, pkgs)
+	if len(errs) > 0 {
+		return nil, errs
 	}
 	info := &Info{
 		Fset: prog.Fset,
 		Sets: make(map[ProviderSetID]*ProviderSet),
 	}
 	oc := newObjectCache(prog)
+	ec := new(errorCollector)
 	for _, pkgInfo := range prog.InitialPackages() {
+		if isWireImport(pkgInfo.Pkg.Path()) {
+			// The marker function package confuses analysis.
+			continue
+		}
 		scope := pkgInfo.Pkg.Scope()
 		for _, name := range scope.Names() {
 			obj := scope.Lookup(name)
@@ -191,8 +179,117 @@ func Load(bctx *build.Context, wd string, pkgs []string) (*Info, []error) {
 			id := ProviderSetID{ImportPath: pset.PkgPath, VarName: name}
 			info.Sets[id] = pset
 		}
+		for _, f := range pkgInfo.Files {
+			for _, decl := range f.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok {
+					continue
+				}
+				buildCall := isInjector(&pkgInfo.Info, fn)
+				if buildCall == nil {
+					continue
+				}
+				set, errs := oc.processNewSet(pkgInfo, buildCall)
+				if len(errs) > 0 {
+					ec.add(notePositionAll(prog.Fset.Position(fn.Pos()), errs)...)
+					continue
+				}
+				sig := pkgInfo.ObjectOf(fn.Name).Type().(*types.Signature)
+				ins, out, err := injectorFuncSignature(sig)
+				if err != nil {
+					if w, ok := err.(*wireErr); ok {
+						ec.add(notePosition(w.position, fmt.Errorf("inject %s: %v", fn.Name.Name, w.error)))
+					} else {
+						ec.add(notePosition(prog.Fset.Position(fn.Pos()), fmt.Errorf("inject %s: %v", fn.Name.Name, err)))
+					}
+					continue
+				}
+				_, errs = solve(prog.Fset, out.out, ins, set)
+				if len(errs) > 0 {
+					ec.add(mapErrors(errs, func(e error) error {
+						if w, ok := e.(*wireErr); ok {
+							return notePosition(w.position, fmt.Errorf("inject %s: %v", fn.Name.Name, w.error))
+						}
+						return notePosition(prog.Fset.Position(fn.Pos()), fmt.Errorf("inject %s: %v", fn.Name.Name, e))
+					})...)
+					continue
+				}
+				info.Injectors = append(info.Injectors, &Injector{
+					ImportPath: pkgInfo.Pkg.Path(),
+					FuncName:   fn.Name.Name,
+				})
+			}
+		}
 	}
 	return info, ec.errors
+}
+
+// load typechecks the packages, including function body type checking
+// for the packages directly named.
+func load(bctx *build.Context, wd string, pkgs []string) (*loader.Program, []error) {
+	var foundPkgs []*build.Package
+	ec := new(errorCollector)
+	for _, name := range pkgs {
+		p, err := bctx.Import(name, wd, build.FindOnly)
+		if err != nil {
+			ec.add(err)
+			continue
+		}
+		foundPkgs = append(foundPkgs, p)
+	}
+	if len(ec.errors) > 0 {
+		return nil, ec.errors
+	}
+	conf := &loader.Config{
+		Build: bctx,
+		Cwd:   wd,
+		TypeChecker: types.Config{
+			Error: func(err error) {
+				ec.add(err)
+			},
+		},
+		TypeCheckFuncBodies: func(path string) bool {
+			return importPathInPkgList(foundPkgs, path)
+		},
+		FindPackage: func(bctx *build.Context, importPath, fromDir string, mode build.ImportMode) (*build.Package, error) {
+			// Optimistically try to load in the package with normal build tags.
+			pkg, err := bctx.Import(importPath, fromDir, mode)
+
+			// If this is the generated package, then load it in with the
+			// wireinject build tag to pick up the injector template. Since
+			// the *build.Context is shared between calls to FindPackage, this
+			// uses a copy.
+			if pkg != nil && importPathInPkgList(foundPkgs, pkg.ImportPath) {
+				bctx2 := new(build.Context)
+				*bctx2 = *bctx
+				n := len(bctx2.BuildTags)
+				bctx2.BuildTags = append(bctx2.BuildTags[:n:n], "wireinject")
+				pkg, err = bctx2.Import(importPath, fromDir, mode)
+			}
+			return pkg, err
+		},
+	}
+	for _, name := range pkgs {
+		conf.Import(name)
+	}
+
+	prog, err := conf.Load()
+	if len(ec.errors) > 0 {
+		return nil, ec.errors
+	}
+	if err != nil {
+		return nil, []error{err}
+	}
+	return prog, nil
+}
+
+func importPathInPkgList(pkgs []*build.Package, path string) bool {
+	for _, p := range pkgs {
+		if path == p.ImportPath {
+			return true
+		}
+	}
+	return false
 }
 
 // Info holds the result of Load.
@@ -201,6 +298,10 @@ type Info struct {
 
 	// Sets contains all the provider sets in the initial packages.
 	Sets map[ProviderSetID]*ProviderSet
+
+	// Injectors contains all the injector functions in the initial packages.
+	// The order is undefined.
+	Injectors []*Injector
 }
 
 // A ProviderSetID identifies a named provider set.
@@ -212,6 +313,17 @@ type ProviderSetID struct {
 // String returns the ID as ""path/to/pkg".Foo".
 func (id ProviderSetID) String() string {
 	return strconv.Quote(id.ImportPath) + "." + id.VarName
+}
+
+// An Injector describes an injector function.
+type Injector struct {
+	ImportPath string
+	FuncName   string
+}
+
+// String returns the injector name as ""path/to/pkg".Foo".
+func (in *Injector) String() string {
+	return strconv.Quote(in.ImportPath) + "." + in.FuncName
 }
 
 // objectCache is a lazily evaluated mapping of objects to Wire structures.
@@ -462,6 +574,19 @@ func processFuncProvider(fset *token.FileSet, fn *types.Func) (*Provider, []erro
 	return provider, nil
 }
 
+func injectorFuncSignature(sig *types.Signature) ([]types.Type, outputSignature, error) {
+	out, err := funcOutput(sig)
+	if err != nil {
+		return nil, outputSignature{}, err
+	}
+	params := sig.Params()
+	given := make([]types.Type, params.Len())
+	for i := 0; i < params.Len(); i++ {
+		given[i] = params.At(i).Type()
+	}
+	return given, out, nil
+}
+
 type outputSignature struct {
 	out     types.Type
 	cleanup bool
@@ -653,7 +778,7 @@ func isInjector(info *types.Info, fn *ast.FuncDecl) *ast.CallExpr {
 		}
 	}
 	buildObj := qualifiedIdentObject(info, call.Fun)
-	if !isWireImport(buildObj.Pkg().Path()) || buildObj.Name() != "Build" {
+	if buildObj == nil || buildObj.Pkg() == nil || !isWireImport(buildObj.Pkg().Path()) || buildObj.Name() != "Build" {
 		return nil
 	}
 	return call

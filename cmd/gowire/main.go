@@ -42,14 +42,18 @@ func main() {
 		err = generate(".")
 	case len(os.Args) == 2 && os.Args[1] == "show":
 		err = show(".")
-	case len(os.Args) == 2:
-		err = generate(os.Args[1])
 	case len(os.Args) > 2 && os.Args[1] == "show":
 		err = show(os.Args[2:]...)
+	case len(os.Args) == 2 && os.Args[1] == "check":
+		err = check(".")
+	case len(os.Args) > 2 && os.Args[1] == "check":
+		err = check(os.Args[2:]...)
+	case len(os.Args) == 2:
+		err = generate(os.Args[1])
 	case len(os.Args) == 3 && os.Args[1] == "gen":
 		err = generate(os.Args[2])
 	default:
-		fmt.Fprintln(os.Stderr, "gowire: usage: gowire [gen] [PKG] | gowire show [...]")
+		fmt.Fprintln(os.Stderr, "gowire: usage: gowire [gen] [PKG] | gowire show [...] | gowire check [...]")
 		os.Exit(64)
 	}
 	if err != nil {
@@ -91,6 +95,7 @@ func generate(pkg string) error {
 // Given one or more packages, show will find all the provider sets
 // declared as top-level variables and print what other provider sets it
 // imports and what outputs it can produce, given possible inputs.
+// It also lists any injector functions defined in the package.
 func show(pkgs ...string) error {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -144,7 +149,38 @@ func show(pkgs ...string) error {
 				}
 			}
 		}
+		if len(info.Injectors) > 0 {
+			injectors := append([]*wire.Injector(nil), info.Injectors...)
+			sort.Slice(injectors, func(i, j int) bool {
+				if injectors[i].ImportPath == injectors[j].ImportPath {
+					return injectors[i].FuncName < injectors[j].FuncName
+				}
+				return injectors[i].ImportPath < injectors[j].ImportPath
+			})
+			fmt.Printf("%sInjectors:%s\n", redBold, reset)
+			for _, in := range injectors {
+				fmt.Printf("\t%v\n", in)
+			}
+		}
 	}
+	if len(errs) > 0 {
+		logErrors(errs)
+		return errors.New("error loading packages")
+	}
+	return nil
+}
+
+// check runs the check subcommand.
+//
+// Given one or more packages, check will print any type-checking or
+// Wire errors found with top-level variable provider sets or injector
+// functions.
+func check(pkgs ...string) error {
+	wd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	_, errs := wire.Load(&build.Default, wd, pkgs)
 	if len(errs) > 0 {
 		logErrors(errs)
 		return errors.New("error loading packages")
