@@ -11,10 +11,10 @@ initialization.
 
 ## Installing
 
-Install `gowire` by running the following inside the Go Cloud repository:
+Install `gowire` by running the following:
 
 ```shell
-vgo install github.com/google/go-cloud/wire/cmd/gowire
+go get github.com/google/go-cloud/wire/cmd/gowire
 ```
 
 ## Basics
