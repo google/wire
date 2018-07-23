@@ -36,7 +36,7 @@ func NewSet(...interface{}) ProviderSet {
 //		panic(wire.Build(otherpkg.FooSet, myProviderFunc))
 //	}
 func Build(...interface{}) string {
-	return "implementation not generated, run gowire"
+	return "implementation not generated, run wire"
 }
 
 // A Binding maps an interface to a concrete type.

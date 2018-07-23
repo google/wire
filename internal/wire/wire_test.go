@@ -68,7 +68,7 @@ func TestWire(t *testing.T) {
 			t.Run(test.name, func(t *testing.T) {
 				t.Parallel()
 
-				// Run gowire from a fake build context.
+				// Run Wire from a fake build context.
 				bctx := test.buildContext()
 				gen, errs := Generate(bctx, wd, test.pkg)
 				if len(gen) > 0 {

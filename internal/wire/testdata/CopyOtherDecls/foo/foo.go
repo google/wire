@@ -15,7 +15,7 @@
 //+build wireinject
 
 // All of the declarations are in one file.
-// gowire should copy non-injectors over, preserving imports.
+// Wire should copy non-injectors over, preserving imports.
 
 package main
 

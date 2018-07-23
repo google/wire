@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// gowire is a compile-time dependency injection tool.
+// Wire is a compile-time dependency injection tool.
 //
 // For an overview, see https://github.com/google/go-cloud/blob/master/wire/README.md
 package main
@@ -53,11 +53,11 @@ func main() {
 	case len(os.Args) == 3 && os.Args[1] == "gen":
 		err = generate(os.Args[2])
 	default:
-		fmt.Fprintln(os.Stderr, "gowire: usage: gowire [gen] [PKG] | gowire show [...] | gowire check [...]")
+		fmt.Fprintln(os.Stderr, "usage: wire [gen] [PKG] | wire show [...] | wire check [...]")
 		os.Exit(64)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "gowire:", err)
+		fmt.Fprintln(os.Stderr, "wire:", err)
 		os.Exit(1)
 	}
 }
@@ -80,7 +80,7 @@ func generate(pkg string) error {
 	}
 	if len(out) == 0 {
 		// No Wire directives, don't write anything.
-		fmt.Fprintln(os.Stderr, "gowire: no injector found for", pkg)
+		fmt.Fprintln(os.Stderr, "wire: no injector found for", pkg)
 		return nil
 	}
 	p := filepath.Join(pkgInfo.Dir, "wire_gen.go")
