@@ -142,7 +142,7 @@ import (
 	"example.com/foobarbaz"
 )
 
-func initializeApp(ctx context.Context) (foobarbaz.Baz, error) {
+func initializeBaz(ctx context.Context) (foobarbaz.Baz, error) {
 	wire.Build(foobarbaz.MegaSet)
 	return foobarbaz.Baz{}, nil
 }
@@ -177,7 +177,7 @@ import (
 	"example.com/foobarbaz"
 )
 
-func initializeApp(ctx context.Context) (foobarbaz.Baz, error) {
+func initializeBaz(ctx context.Context) (foobarbaz.Baz, error) {
 	foo := foobarbaz.ProvideFoo()
 	bar := foobarbaz.ProvideBar(foo)
 	baz, err := foobarbaz.ProvideBaz(ctx, bar)
