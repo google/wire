@@ -35,9 +35,14 @@ import (
 	"golang.org/x/tools/go/types/typeutil"
 )
 
+const usage = "usage: wire [gen] [PKG] | wire show [...] | wire check [...]"
+
 func main() {
 	var err error
 	switch {
+	case len(os.Args) == 2 && (os.Args[1] == "help" || os.Args[1] == "-h" || os.Args[1] == "-help" || os.Args[1] == "--help"):
+		fmt.Fprintln(os.Stderr, usage)
+		os.Exit(0)
 	case len(os.Args) == 1 || len(os.Args) == 2 && os.Args[1] == "gen":
 		err = generate(".")
 	case len(os.Args) == 2 && os.Args[1] == "show":
@@ -53,7 +58,7 @@ func main() {
 	case len(os.Args) == 3 && os.Args[1] == "gen":
 		err = generate(os.Args[2])
 	default:
-		fmt.Fprintln(os.Stderr, "usage: wire [gen] [PKG] | wire show [...] | wire check [...]")
+		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(64)
 	}
 	if err != nil {
