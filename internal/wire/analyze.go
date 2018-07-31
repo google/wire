@@ -240,14 +240,14 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 	// Process imports first, verifying that there are no conflicts between sets.
 	ec := new(errorCollector)
 	for _, imp := range set.Imports {
-		for _, k := range imp.providerMap.Keys() {
+		imp.providerMap.Iterate(func(k types.Type, v interface{}) {
 			if providerMap.At(k) != nil {
 				ec.add(bindingConflictError(fset, imp.Pos, k, setMap.At(k).(*ProviderSet)))
-				continue
+				return
 			}
-			providerMap.Set(k, imp.providerMap.At(k))
+			providerMap.Set(k, v)
 			setMap.Set(k, imp)
-		}
+		})
 	}
 	if len(ec.errors) > 0 {
 		return nil, ec.errors
