@@ -29,6 +29,15 @@ import (
 	"golang.org/x/tools/go/types/typeutil"
 )
 
+// A providerSetSrc captures the source for a type provided by a ProviderSet.
+// Exactly one of the fields will be set.
+type providerSetSrc struct {
+	Provider *Provider
+	Binding  *IfaceBinding
+	Value    *Value
+	Import   *ProviderSet
+}
+
 // A ProviderSet describes a set of providers.  The zero value is an empty
 // ProviderSet.
 type ProviderSet struct {
@@ -49,6 +58,10 @@ type ProviderSet struct {
 	// providerMap maps from provided type to a *Provider or *Value.
 	// It includes all of the imported types.
 	providerMap *typeutil.Map
+
+	// srcMap maps from provided type to a *providerSetSrc capturing the
+	// Provider, Binding, Value, or Import that provided the type.
+	srcMap *typeutil.Map
 }
 
 // Outputs returns a new slice containing the set of possible types the
@@ -496,7 +509,7 @@ func (oc *objectCache) processNewSet(pkg *loader.PackageInfo, call *ast.CallExpr
 		return nil, ec.errors
 	}
 	var errs []error
-	pset.providerMap, errs = buildProviderMap(oc.prog.Fset, oc.hasher, pset)
+	pset.providerMap, pset.srcMap, errs = buildProviderMap(oc.prog.Fset, oc.hasher, pset)
 	if len(errs) > 0 {
 		return nil, errs
 	}

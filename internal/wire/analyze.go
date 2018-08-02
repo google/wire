@@ -108,7 +108,6 @@ func solve(fset *token.FileSet, out types.Type, given []types.Type, set *Provide
 			index.Set(g, i)
 		}
 	}
-
 	if len(ec.errors) > 0 {
 		return nil, ec.errors
 	}
@@ -118,6 +117,7 @@ func solve(fset *token.FileSet, out types.Type, given []types.Type, set *Provide
 	// guaranteed to be acyclic. An index value of errAbort indicates that
 	// the type was visited, but failed due to an error added to ec.
 	errAbort := errors.New("failed to visit")
+	var used []*providerSetSrc
 	var calls []call
 	type frame struct {
 		t    types.Type
@@ -145,6 +145,8 @@ dfs:
 			continue
 		case pv.IsProvider():
 			p := pv.Provider()
+			src := set.srcMap.At(curr.t).(*providerSetSrc)
+			used = append(used, src)
 			if !types.Identical(p.Out, curr.t) {
 				// Interface binding.  Don't create a call ourselves.
 				i := index.At(p.Out)
@@ -212,6 +214,8 @@ dfs:
 				index.Set(curr.t, i)
 				continue
 			}
+			src := set.srcMap.At(curr.t).(*providerSetSrc)
+			used = append(used, src)
 			index.Set(curr.t, len(given)+len(calls))
 			calls = append(calls, call{
 				kind:          valueExpr,
@@ -226,14 +230,77 @@ dfs:
 	if len(ec.errors) > 0 {
 		return nil, ec.errors
 	}
+	if errs := verifyArgsUsed(set, used); len(errs) > 0 {
+		return nil, errs
+	}
 	return calls, nil
 }
 
-// buildProviderMap creates the providerMap field for a given provider set.
-// The given provider set's providerMap field is ignored.
-func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *ProviderSet) (*typeutil.Map, []error) {
+// verifyArgsUsed ensures that all of the arguments in set were used during solve.
+func verifyArgsUsed(set *ProviderSet, used []*providerSetSrc) []error {
+	var errs []error
+	for _, imp := range set.Imports {
+		found := false
+		for _, u := range used {
+			if u.Import == imp {
+				found = true
+				break
+			}
+		}
+		if !found {
+			if imp.Name == "" {
+				errs = append(errs, errors.New("unused provider set"))
+			} else {
+				errs = append(errs, fmt.Errorf("unused provider set %q", imp.Name))
+			}
+		}
+	}
+	for _, p := range set.Providers {
+		found := false
+		for _, u := range used {
+			if u.Provider == p {
+				found = true
+				break
+			}
+		}
+		if !found {
+			errs = append(errs, fmt.Errorf("unused provider %q", p.Name))
+		}
+	}
+	for _, v := range set.Values {
+		found := false
+		for _, u := range used {
+			if u.Value == v {
+				found = true
+				break
+			}
+		}
+		if !found {
+			errs = append(errs, fmt.Errorf("unused value of type %s", types.TypeString(v.Out, nil)))
+		}
+	}
+	for _, b := range set.Bindings {
+		found := false
+		for _, u := range used {
+			if u.Binding == b {
+				found = true
+				break
+			}
+		}
+		if !found {
+			errs = append(errs, fmt.Errorf("unused interface binding to type %s", types.TypeString(b.Iface, nil)))
+		}
+	}
+	return errs
+}
+
+// buildProviderMap creates the providerMap and srcMap fields for a given provider set.
+// The given provider set's providerMap and srcMap fields are ignored.
+func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *ProviderSet) (*typeutil.Map, *typeutil.Map, []error) {
 	providerMap := new(typeutil.Map)
 	providerMap.SetHasher(hasher)
+	srcMap := new(typeutil.Map)
+	srcMap.SetHasher(hasher)
 	setMap := new(typeutil.Map) // to *ProviderSet, for error messages
 	setMap.SetHasher(hasher)
 
@@ -246,11 +313,12 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 				return
 			}
 			providerMap.Set(k, v)
+			srcMap.Set(k, &providerSetSrc{Import: imp})
 			setMap.Set(k, imp)
 		})
 	}
 	if len(ec.errors) > 0 {
-		return nil, ec.errors
+		return nil, nil, ec.errors
 	}
 
 	// Process non-binding providers in new set.
@@ -260,6 +328,7 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 			continue
 		}
 		providerMap.Set(p.Out, p)
+		srcMap.Set(p.Out, &providerSetSrc{Provider: p})
 		setMap.Set(p.Out, set)
 	}
 	for _, v := range set.Values {
@@ -268,10 +337,11 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 			continue
 		}
 		providerMap.Set(v.Out, v)
+		srcMap.Set(v.Out, &providerSetSrc{Value: v})
 		setMap.Set(v.Out, set)
 	}
 	if len(ec.errors) > 0 {
-		return nil, ec.errors
+		return nil, nil, ec.errors
 	}
 
 	// Process bindings in set. Must happen after the other providers to
@@ -289,12 +359,13 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 			continue
 		}
 		providerMap.Set(b.Iface, concrete)
+		srcMap.Set(b.Iface, &providerSetSrc{Binding: b})
 		setMap.Set(b.Iface, set)
 	}
 	if len(ec.errors) > 0 {
-		return nil, ec.errors
+		return nil, nil, ec.errors
 	}
-	return providerMap, nil
+	return providerMap, srcMap, nil
 }
 
 func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
