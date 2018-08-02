@@ -86,7 +86,7 @@ func generateInjectors(g *gen, pkgInfo *loader.PackageInfo) (injectorFiles []*as
 				g.p("// Injectors from %s:\n\n", name)
 				injectorFiles = append(injectorFiles, f)
 			}
-			set, errs := oc.processNewSet(pkgInfo, buildCall)
+			set, errs := oc.processNewSet(pkgInfo, buildCall, "")
 			if len(errs) > 0 {
 				ec.add(notePositionAll(g.prog.Fset.Position(fn.Pos()), errs)...)
 				continue

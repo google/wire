@@ -46,9 +46,9 @@ type ProviderSet struct {
 	Pos token.Pos
 	// PkgPath is the import path of the package that declared this set.
 	PkgPath string
-	// Name is the variable name of the set, if it came from a package
+	// VarName is the variable name of the set, if it came from a package
 	// variable.
-	Name string
+	VarName string
 
 	Providers []*Provider
 	Bindings  []*IfaceBinding
@@ -202,7 +202,7 @@ func Load(bctx *build.Context, wd string, pkgs []string) (*Info, []error) {
 				if buildCall == nil {
 					continue
 				}
-				set, errs := oc.processNewSet(pkgInfo, buildCall)
+				set, errs := oc.processNewSet(pkgInfo, buildCall, "")
 				if len(errs) > 0 {
 					ec.add(notePositionAll(prog.Fset.Position(fn.Pos()), errs)...)
 					continue
@@ -393,7 +393,7 @@ func (oc *objectCache) get(obj types.Object) (val interface{}, errs []error) {
 				break
 			}
 		}
-		return oc.processExpr(oc.prog.Package(obj.Pkg().Path()), spec.Values[i])
+		return oc.processExpr(oc.prog.Package(obj.Pkg().Path()), spec.Values[i], obj.Name())
 	case *types.Func:
 		return processFuncProvider(oc.prog.Fset, obj)
 	default:
@@ -424,7 +424,7 @@ func (oc *objectCache) varDecl(obj *types.Var) *ast.ValueSpec {
 // processExpr converts an expression into a Wire structure. It may
 // return a *Provider, a structProviderPair, an *IfaceBinding, a
 // *ProviderSet, or a *Value.
-func (oc *objectCache) processExpr(pkg *loader.PackageInfo, expr ast.Expr) (interface{}, []error) {
+func (oc *objectCache) processExpr(pkg *loader.PackageInfo, expr ast.Expr, varName string) (interface{}, []error) {
 	exprPos := oc.prog.Fset.Position(expr.Pos())
 	expr = astutil.Unparen(expr)
 	if obj := qualifiedIdentObject(&pkg.Info, expr); obj != nil {
@@ -440,7 +440,7 @@ func (oc *objectCache) processExpr(pkg *loader.PackageInfo, expr ast.Expr) (inte
 		}
 		switch fnObj.Name() {
 		case "NewSet":
-			pset, errs := oc.processNewSet(pkg, call)
+			pset, errs := oc.processNewSet(pkg, call, varName)
 			return pset, notePositionAll(exprPos, errs)
 		case "Bind":
 			b, err := processBind(oc.prog.Fset, &pkg.Info, call)
@@ -476,16 +476,17 @@ type structProviderPair struct {
 	ptrProvider *Provider
 }
 
-func (oc *objectCache) processNewSet(pkg *loader.PackageInfo, call *ast.CallExpr) (*ProviderSet, []error) {
+func (oc *objectCache) processNewSet(pkg *loader.PackageInfo, call *ast.CallExpr, varName string) (*ProviderSet, []error) {
 	// Assumes that call.Fun is wire.NewSet or wire.Build.
 
 	pset := &ProviderSet{
 		Pos:     call.Pos(),
 		PkgPath: pkg.Pkg.Path(),
+		VarName: varName,
 	}
 	ec := new(errorCollector)
 	for _, arg := range call.Args {
-		item, errs := oc.processExpr(pkg, arg)
+		item, errs := oc.processExpr(pkg, arg, "")
 		if len(errs) > 0 {
 			ec.add(errs...)
 			continue
