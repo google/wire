@@ -33,6 +33,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/go-cloud/internal/testing/setup"
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestWire(t *testing.T) {
@@ -110,9 +111,10 @@ func TestWire(t *testing.T) {
 				// generated result. This check is meant to
 				// detect non-deterministic behavior in the
 				// Generate function.
-				gold := test.wantWireOutput
-				if !bytes.Equal(gen, gold) {
-					t.Fatalf("wire output differs from golden file:\n%s\nIf this change is expected, run with -record to update the wire_gen.go file.", diff(string(gold), string(gen)))
+				if !bytes.Equal(gen, test.wantWireOutput) {
+					gotS, wantS := string(gen), string(test.wantWireOutput)
+					diff := cmp.Diff(strings.Split(gotS, "\n"), strings.Split(wantS, "\n"))
+					t.Fatalf("wire output differs from golden file. If this change is expected, run with -record to update the wire_gen.go file.\n*** got:\n%s\n\n*** want:\n%s\n\n*** diff:\n%s", gotS, wantS, diff)
 				}
 			}
 		})
@@ -164,7 +166,9 @@ func goBuildCheck(test *testCase, wd string, bctx *build.Context, gen []byte) er
 		return fmt.Errorf("run compiled program: %v", err)
 	}
 	if !bytes.Equal(out, test.wantProgramOutput) {
-		return fmt.Errorf("compiled program output = %q; want %q", out, test.wantProgramOutput)
+		gotS, wantS := string(out), string(test.wantProgramOutput)
+		diff := cmp.Diff(strings.Split(gotS, "\n"), strings.Split(wantS, "\n"))
+		return fmt.Errorf("compiled program output doesn't match:\n*** got:\n%s\n\n*** want:\n%s\n\n*** diff:\n%s", gotS, wantS, diff)
 	}
 	return nil
 }
@@ -587,42 +591,6 @@ func runGo(bctx *build.Context, args ...string) error {
 		return err
 	}
 	return nil
-}
-
-func diff(want, got string) string {
-	d, err := runDiff([]byte(want), []byte(got))
-	if err == nil {
-		return string(d)
-	}
-	return "*** got:\n" + got + "\n\n*** want:\n" + want
-}
-
-func runDiff(a, b []byte) ([]byte, error) {
-	fa, err := ioutil.TempFile("", "wire_test_diff")
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		os.Remove(fa.Name())
-		fa.Close()
-	}()
-	fb, err := ioutil.TempFile("", "wire_test_diff")
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		os.Remove(fb.Name())
-		fb.Close()
-	}()
-	if _, err := fa.Write(a); err != nil {
-		return nil, err
-	}
-	if _, err := fb.Write(b); err != nil {
-		return nil, err
-	}
-	c := exec.Command("diff", "-u", fa.Name(), fb.Name())
-	out, err := c.Output()
-	return out, err
 }
 
 func errorListContains(errs []error, substr string) bool {
