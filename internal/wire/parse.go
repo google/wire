@@ -716,19 +716,17 @@ func processValue(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*V
 	}
 	ok := true
 	ast.Inspect(call.Args[0], func(node ast.Node) bool {
-		switch node.(type) {
+		switch expr := node.(type) {
 		case nil, *ast.ArrayType, *ast.BasicLit, *ast.BinaryExpr, *ast.ChanType, *ast.CompositeLit, *ast.FuncType, *ast.Ident, *ast.IndexExpr, *ast.InterfaceType, *ast.KeyValueExpr, *ast.MapType, *ast.ParenExpr, *ast.SelectorExpr, *ast.SliceExpr, *ast.StarExpr, *ast.StructType, *ast.TypeAssertExpr:
 			// Good!
 		case *ast.UnaryExpr:
-			expr := node.(*ast.UnaryExpr)
 			if expr.Op == token.ARROW {
 				ok = false
 				return false
 			}
 		case *ast.CallExpr:
 			// Only acceptable if it's a type conversion.
-			call := node.(*ast.CallExpr)
-			if _, isFunc := info.TypeOf(call.Fun).(*types.Signature); isFunc {
+			if _, isFunc := info.TypeOf(expr.Fun).(*types.Signature); isFunc {
 				ok = false
 				return false
 			}

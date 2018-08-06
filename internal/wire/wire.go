@@ -366,7 +366,7 @@ func (g *gen) rewritePkgRefs(info *types.Info, node ast.Node) ast.Node {
 			if len(scopeStack) > 0 {
 				// Avoid picking a name that conflicts with other names in the
 				// current scope.
-				_, obj := scopeStack[len(scopeStack)-1].LookupParent(n, 0)
+				_, obj := scopeStack[len(scopeStack)-1].LookupParent(n, token.NoPos)
 				if obj != nil {
 					return true
 				}
@@ -436,7 +436,7 @@ func (g *gen) nameInFileScope(name string) bool {
 			return true
 		}
 	}
-	_, obj := g.prog.Package(g.currPackage).Pkg.Scope().LookupParent(name, 0)
+	_, obj := g.prog.Package(g.currPackage).Pkg.Scope().LookupParent(name, token.NoPos)
 	return obj != nil
 }
 
@@ -481,13 +481,14 @@ func injectPass(name string, params *types.Tuple, injectSig outputSignature, cal
 		ig.p("%s %s", ig.paramNames[i], types.TypeString(pi.Type(), ig.g.qualifyPkg))
 	}
 	outTypeString := types.TypeString(injectSig.out, ig.g.qualifyPkg)
-	if injectSig.cleanup && injectSig.err {
+	switch {
+	case injectSig.cleanup && injectSig.err:
 		ig.p(") (%s, func(), error) {\n", outTypeString)
-	} else if injectSig.cleanup {
+	case injectSig.cleanup:
 		ig.p(") (%s, func()) {\n", outTypeString)
-	} else if injectSig.err {
+	case injectSig.err:
 		ig.p(") (%s, error) {\n", outTypeString)
-	} else {
+	default:
 		ig.p(") %s {\n", outTypeString)
 	}
 	for i := range calls {

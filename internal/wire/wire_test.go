@@ -513,7 +513,7 @@ type dirInfo struct {
 
 func (d dirInfo) Name() string       { return d.name }
 func (d dirInfo) Size() int64        { return 0 }
-func (d dirInfo) Mode() os.FileMode  { return os.ModeDir | 0777 }
+func (d dirInfo) Mode() os.FileMode  { return os.ModeDir | os.ModePerm }
 func (d dirInfo) ModTime() time.Time { return time.Unix(0, 0) }
 func (d dirInfo) IsDir() bool        { return true }
 func (d dirInfo) Sys() interface{}   { return nil }
