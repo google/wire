@@ -1,3 +1,2 @@
-ERROR
 foo.Foo
 conflicts with provider

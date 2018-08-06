@@ -31,6 +31,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/google/go-cloud/internal/testing/setup"
 )
 
 func TestWire(t *testing.T) {
@@ -54,121 +56,117 @@ func TestWire(t *testing.T) {
 		test, err := loadTestCase(filepath.Join(testRoot, name), wireGo)
 		if err != nil {
 			t.Error(err)
+			continue
 		}
 		tests = append(tests, test)
 	}
 	wd := filepath.Join(magicGOPATH(), "src")
 
-	t.Run("Generate", func(t *testing.T) {
+	if *setup.Record {
 		if _, err := os.Stat(filepath.Join(build.Default.GOROOT, "bin", "go")); err != nil {
-			t.Skip("go toolchain not available:", err)
+			t.Fatal("go toolchain not available:", err)
 		}
-		for _, test := range tests {
-			test := test
-			t.Run(test.name, func(t *testing.T) {
-				t.Parallel()
-
-				// Run Wire from a fake build context.
-				bctx := test.buildContext()
-				gen, errs := Generate(bctx, wd, test.pkg)
-				if len(gen) > 0 {
-					defer t.Logf("wire_gen.go:\n%s", gen)
-				}
-				if len(errs) > 0 {
-					for _, e := range errs {
-						t.Log(e)
-					}
-					if !test.wantError {
-						t.Fatal("Did not expect errors.")
-					}
-					for _, s := range test.wantErrorStrings {
-						if !errorListContains(errs, s) {
-							t.Errorf("Errors did not contain %q", s)
-						}
-					}
-					return
-				}
-				if len(errs) == 0 && test.wantError {
-					t.Fatal("wirego succeeded; want error")
-				}
-
-				// Find the absolute import path, since test.pkg may be a relative
-				// import path.
-				genPkg, err := bctx.Import(test.pkg, wd, build.FindOnly)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				// Run a `go build` with the generated output.
-				gopath, err := ioutil.TempDir("", "wire_test")
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer os.RemoveAll(gopath)
-				if err := test.materialize(gopath); err != nil {
-					t.Fatal(err)
-				}
-				if len(gen) > 0 {
-					genPath := filepath.Join(gopath, "src", filepath.FromSlash(genPkg.ImportPath), "wire_gen.go")
-					if err := ioutil.WriteFile(genPath, gen, 0666); err != nil {
-						t.Fatal(err)
-					}
-				}
-				testExePath := filepath.Join(gopath, "bin", "testprog")
-				realBuildCtx := &build.Context{
-					GOARCH:      bctx.GOARCH,
-					GOOS:        bctx.GOOS,
-					GOROOT:      bctx.GOROOT,
-					GOPATH:      gopath,
-					CgoEnabled:  bctx.CgoEnabled,
-					Compiler:    bctx.Compiler,
-					BuildTags:   bctx.BuildTags,
-					ReleaseTags: bctx.ReleaseTags,
-				}
-				if err := runGo(realBuildCtx, "build", "-o", testExePath, genPkg.ImportPath); err != nil {
-					t.Fatal("build:", err)
-				}
-
-				// Run the resulting program and compare its output to the expected
-				// output.
-				out, err := exec.Command(testExePath).Output()
-				if err != nil {
-					t.Error("run compiled program:", err)
-				}
-				if !bytes.Equal(out, test.wantOutput) {
-					t.Errorf("compiled program output = %q; want %q", out, test.wantOutput)
-				}
-			})
-		}
-	})
-
-	t.Run("Determinism", func(t *testing.T) {
-		const runs = 2
-		for _, test := range tests {
-			if test.wantError {
-				continue
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Run Wire from a fake build context.
+			bctx := test.buildContext()
+			gen, errs := Generate(bctx, wd, test.pkg)
+			if len(gen) > 0 {
+				defer t.Logf("wire_gen.go:\n%s", gen)
 			}
-			test := test
-			t.Run(test.name, func(t *testing.T) {
-				t.Parallel()
-				bctx := test.buildContext()
-				gold, errs := Generate(bctx, wd, test.pkg)
-				if len(errs) > 0 {
-					t.Fatal("wirego:", errs)
+			if len(errs) > 0 {
+				for _, e := range errs {
+					t.Log(e)
 				}
-				goldstr := string(gold)
-				for i := 0; i < runs-1; i++ {
-					out, errs := Generate(bctx, wd, test.pkg)
-					if len(errs) > 0 {
-						t.Fatal("wirego (on subsequent run):", errs)
-					}
-					if !bytes.Equal(gold, out) {
-						t.Fatalf("wirego output differs when run repeatedly on same input:\n%s", diff(goldstr, string(out)))
+				if !test.wantWireError {
+					t.Fatal("Did not expect errors.")
+				}
+				for _, s := range test.wantWireErrorStrings {
+					if !errorListContains(errs, s) {
+						t.Errorf("Errors did not contain %q", s)
 					}
 				}
-			})
+				return
+			}
+			if test.wantWireError {
+				t.Fatal("wire succeeded; want error")
+			}
+
+			if *setup.Record {
+				// Record ==> Build the generated Wire code,
+				// check that the program's output matches the
+				// expected output, save wire output on
+				// success.
+				if err := goBuildCheck(test, wd, bctx, gen); err != nil {
+					t.Fatalf("go build check failed: %v", err)
+				}
+				wireGenFile := filepath.Join(testRoot, test.name, "want", "wire_gen.go")
+				if err := ioutil.WriteFile(wireGenFile, gen, 0666); err != nil {
+					t.Fatalf("failed to write wire_gen.go file: %v", err)
+				}
+			} else {
+				// Replay ==> Load golden file and compare to
+				// generated result. This check is meant to
+				// detect non-deterministic behavior in the
+				// Generate function.
+				gold := test.wantWireOutput
+				if !bytes.Equal(gen, gold) {
+					t.Fatalf("wire output differs from golden file:\n%s\nIf this change is expected, run with -record to update the wire_gen.go file.", diff(string(gold), string(gen)))
+				}
+			}
+		})
+	}
+}
+
+func goBuildCheck(test *testCase, wd string, bctx *build.Context, gen []byte) error {
+	// Find the absolute import path, since test.pkg may be a relative
+	// import path.
+	genPkg, err := bctx.Import(test.pkg, wd, build.FindOnly)
+	if err != nil {
+		return err
+	}
+
+	// Run a `go build` with the generated output.
+	gopath, err := ioutil.TempDir("", "wire_test")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(gopath)
+	if err := test.materialize(gopath); err != nil {
+		return err
+	}
+	if len(gen) > 0 {
+		genPath := filepath.Join(gopath, "src", filepath.FromSlash(genPkg.ImportPath), "wire_gen.go")
+		if err := ioutil.WriteFile(genPath, gen, 0666); err != nil {
+			return err
 		}
-	})
+	}
+	testExePath := filepath.Join(gopath, "bin", "testprog")
+	realBuildCtx := &build.Context{
+		GOARCH:      bctx.GOARCH,
+		GOOS:        bctx.GOOS,
+		GOROOT:      bctx.GOROOT,
+		GOPATH:      gopath,
+		CgoEnabled:  bctx.CgoEnabled,
+		Compiler:    bctx.Compiler,
+		BuildTags:   bctx.BuildTags,
+		ReleaseTags: bctx.ReleaseTags,
+	}
+	if err := runGo(realBuildCtx, "build", "-o", testExePath, genPkg.ImportPath); err != nil {
+		return fmt.Errorf("build: %v", err)
+	}
+
+	// Run the resulting program and compare its output to the expected
+	// output.
+	out, err := exec.Command(testExePath).Output()
+	if err != nil {
+		return fmt.Errorf("run compiled program: %v", err)
+	}
+	if !bytes.Equal(out, test.wantProgramOutput) {
+		return fmt.Errorf("compiled program output = %q; want %q", out, test.wantProgramOutput)
+	}
+	return nil
 }
 
 func TestUnexport(t *testing.T) {
@@ -284,13 +282,13 @@ func isIdent(s string) bool {
 }
 
 type testCase struct {
-	name       string
-	pkg        string
-	goFiles    map[string][]byte
-	wantOutput []byte
-
-	wantError        bool
-	wantErrorStrings []string
+	name                 string
+	pkg                  string
+	goFiles              map[string][]byte
+	wantProgramOutput    []byte
+	wantWireOutput       []byte
+	wantWireError        bool
+	wantWireErrorStrings []string
 }
 
 // loadTestCase reads a test case from a directory.
@@ -298,26 +296,52 @@ type testCase struct {
 // The directory structure is:
 //
 //	root/
-//		pkg        file containing the package name containing the inject function
-//		           (must also be package main)
-//		out.txt    file containing the expected output, or starting with the
-//		           magic line "ERROR" if this test should cause generation to
-//		           fail (any subsequent lines are substrings that should
-//		           appear in the errors).
-//		...        any Go files found recursively placed under GOPATH/src/...
+//
+//		pkg
+//			file containing the package name containing the inject function
+//			(must also be package main)
+//
+//		...
+//			any Go files found recursively placed under GOPATH/src/...
+//
+//		want/
+//
+//			wire_errs.txt
+//					expected errors from the Wire Generate function,
+//					missing if no errors expected
+//
+//			wire_gen.go
+//					verified output of wire from a test run with
+//					-record, missing if wire_errs.txt is present
+//
+//			program_out.txt
+//					expected output from the final compiled program,
+//					missing if wire_errs.txt is present
+//
 func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 	name := filepath.Base(root)
 	pkg, err := ioutil.ReadFile(filepath.Join(root, "pkg"))
 	if err != nil {
 		return nil, fmt.Errorf("load test case %s: %v", name, err)
 	}
-	out, err := ioutil.ReadFile(filepath.Join(root, "out.txt"))
-	if err != nil {
-		return nil, fmt.Errorf("load test case %s: %v", name, err)
-	}
-	wantErrorStrings, wantError := parseGoldenOutput(out)
-	if wantError {
-		out = nil
+	var wantProgramOutput []byte
+	var wantWireOutput []byte
+	wireErrb, err := ioutil.ReadFile(filepath.Join(root, "want", "wire_errs.txt"))
+	wantWireError := err == nil
+	var wantWireErrorStrings []string
+	if wantWireError {
+		wantWireErrorStrings = strings.Split(strings.TrimSpace(string(wireErrb)), "\n")
+	} else {
+		if !*setup.Record {
+			wantWireOutput, err = ioutil.ReadFile(filepath.Join(root, "want", "wire_gen.go"))
+			if err != nil {
+				return nil, fmt.Errorf("load test case %s: %v. If this is a new testcase, run with -record to generate the wire_gen.go file.", name, err)
+			}
+		}
+		wantProgramOutput, err = ioutil.ReadFile(filepath.Join(root, "want", "program_out.txt"))
+		if err != nil {
+			return nil, fmt.Errorf("load test case %s: %v", name, err)
+		}
 	}
 	goFiles := map[string][]byte{
 		"github.com/google/go-cloud/wire/wire.go": wireGoSrc,
@@ -344,12 +368,13 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 		return nil, fmt.Errorf("load test case %s: %v", name, err)
 	}
 	return &testCase{
-		name:             name,
-		pkg:              string(bytes.TrimSpace(pkg)),
-		goFiles:          goFiles,
-		wantOutput:       out,
-		wantError:        wantError,
-		wantErrorStrings: wantErrorStrings,
+		name:                 name,
+		pkg:                  string(bytes.TrimSpace(pkg)),
+		goFiles:              goFiles,
+		wantWireOutput:       wantWireOutput,
+		wantProgramOutput:    wantProgramOutput,
+		wantWireError:        wantWireError,
+		wantWireErrorStrings: wantWireErrorStrings,
 	}, nil
 }
 
@@ -598,19 +623,6 @@ func runDiff(a, b []byte) ([]byte, error) {
 	c := exec.Command("diff", "-u", fa.Name(), fb.Name())
 	out, err := c.Output()
 	return out, err
-}
-
-func parseGoldenOutput(out []byte) (errorStrings []string, wantError bool) {
-	const errorPrefix = "ERROR\n"
-	if !bytes.HasPrefix(out, []byte(errorPrefix)) {
-		return nil, false
-	}
-	// Skip past first line.
-	out = out[len(errorPrefix):]
-	// Remove any leading or trailing blank lines.
-	out = bytes.Trim(out, "\n")
-	// Split lines.
-	return strings.Split(string(out), "\n"), true
 }
 
 func errorListContains(errs []error, substr string) bool {
