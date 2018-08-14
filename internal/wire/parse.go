@@ -454,6 +454,12 @@ func (oc *objectCache) processExpr(pkg *loader.PackageInfo, expr ast.Expr, varNa
 				return nil, []error{notePosition(exprPos, err)}
 			}
 			return v, nil
+		case "InterfaceValue":
+			v, err := processInterfaceValue(oc.prog.Fset, &pkg.Info, call)
+			if err != nil {
+				return nil, []error{notePosition(exprPos, err)}
+			}
+			return v, nil
 		default:
 			return nil, []error{notePosition(exprPos, errors.New("unknown pattern"))}
 		}
@@ -739,10 +745,44 @@ func processValue(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*V
 	if !ok {
 		return nil, notePosition(fset.Position(call.Pos()), errors.New("argument to Value is too complex"))
 	}
+	// Result type can't be an interface type; use wire.InterfaceValue for that.
+	argType := info.TypeOf(call.Args[0])
+	if _, isInterfaceType := argType.Underlying().(*types.Interface); isInterfaceType {
+		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("argument to Value may not be an interface value (found %s); use InterfaceValue instead", types.TypeString(argType, nil)))
+	}
 	return &Value{
 		Pos:  call.Args[0].Pos(),
 		Out:  info.TypeOf(call.Args[0]),
 		expr: call.Args[0],
+		info: info,
+	}, nil
+}
+
+// processInterfaceValue creates a value from a wire.InterfaceValue call.
+func processInterfaceValue(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*Value, error) {
+	// Assumes that call.Fun is wire.InterfaceValue.
+
+	if len(call.Args) != 2 {
+		return nil, notePosition(fset.Position(call.Pos()), errors.New("call to InterfaceValue takes exactly two arguments"))
+	}
+	ifaceArgType := info.TypeOf(call.Args[0])
+	ifacePtr, ok := ifaceArgType.(*types.Pointer)
+	if !ok {
+		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("first argument to InterfaceValue must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
+	}
+	iface := ifacePtr.Elem()
+	methodSet, ok := iface.Underlying().(*types.Interface)
+	if !ok {
+		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("first argument to InterfaceValue must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
+	}
+	provided := info.TypeOf(call.Args[1])
+	if !types.Implements(provided, methodSet) {
+		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("%s does not implement %s", types.TypeString(provided, nil), types.TypeString(ifaceArgType, nil)))
+	}
+	return &Value{
+		Pos:  call.Args[1].Pos(),
+		Out:  iface,
+		expr: call.Args[1],
 		info: info,
 	}, nil
 }
@@ -845,7 +885,7 @@ func (pv ProviderOrValue) Provider() *Provider {
 	return pv.p
 }
 
-// Provider returns pv as a Value pointer. It panics if pv points to a
+// Value returns pv as a Value pointer. It panics if pv points to a
 // Provider.
 func (pv ProviderOrValue) Value() *Value {
 	if pv.p != nil {

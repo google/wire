@@ -20,8 +20,8 @@ type ProviderSet struct{}
 
 // NewSet creates a new provider set that includes the providers in
 // its arguments. Each argument is either an exported function value,
-// an exported struct (zero) value, a provider set, a call to Bind, or
-// a call to Value.
+// an exported struct (zero) value, a provider set, a call to Bind, a
+// a call to Value, or a call to InterfaceValue.
 func NewSet(...interface{}) ProviderSet {
 	return ProviderSet{}
 }
@@ -72,10 +72,20 @@ func Bind(iface, to interface{}) Binding {
 type ProvidedValue struct{}
 
 // Value binds an expression to provide the type of the expression.
+// The expression may not be an interface value; use InterfaceValue for that.
 //
 // Example:
 //
 //	var MySet = wire.NewSet(wire.Value([]string(nil)))
 func Value(interface{}) ProvidedValue {
+	return ProvidedValue{}
+}
+
+// InterfaceValue binds an expression to provide a specific interface type.
+//
+// Example:
+//
+//	var MySet = wire.NewSet(wire.InterfaceValue(new(io.Reader), os.Stdin))
+func InterfaceValue(typ interface{}, x interface{}) ProvidedValue {
 	return ProvidedValue{}
 }

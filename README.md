@@ -317,6 +317,14 @@ package; references to variables will be evaluated during the injector
 package's initialization. Wire will emit an error if the expression calls
 any functions or receives from any channels.
 
+For interface values, use `InterfaceValue`:
+
+```go
+func injectReader() io.Reader {
+	wire.Build(wire.InterfaceValue(new(io.Reader), os.Stdin))
+	return Foo{}
+}
+```
 ### Cleanup functions
 
 If a provider creates a value that needs to be cleaned up (e.g. closing a file),

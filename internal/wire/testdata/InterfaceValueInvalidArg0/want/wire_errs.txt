@@ -1,0 +1,1 @@
+first argument to InterfaceValue must be a pointer to an interface type; found string
