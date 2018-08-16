@@ -17,7 +17,7 @@ package main
 import (
 	"fmt"
 
-	"foo"
+	"example.com/foo"
 	"github.com/google/go-cloud/wire"
 )
 

@@ -1,2 +1,2 @@
-no provider found for foo.Foo
-no provider found for foo.Bar
+no provider found for example.com/foo.Foo
+no provider found for example.com/foo.Bar

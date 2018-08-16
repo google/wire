@@ -71,6 +71,10 @@ func TestWire(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			if test.name == "Vendor" && os.Getenv("GO111MODULE") != "off" {
+				// TODO: Remove the GO111MODULE check when it is not relevant (maybe after Go 1.12).
+				t.Skip("Skipped testing for vendored package for Go module turned on, see https://github.com/google/go-cloud/issues/326")
+			}
 			t.Parallel()
 
 			// Run Wire from a fake build context.
@@ -147,6 +151,9 @@ func goBuildCheck(test *testCase, wd string, bctx *build.Context, gen []byte) er
 			return err
 		}
 	}
+	if err := writeGoMod(gopath); err != nil {
+		return err
+	}
 	testExePath := filepath.Join(gopath, "bin", "testprog")
 	realBuildCtx := &build.Context{
 		GOARCH:      bctx.GOARCH,
@@ -158,7 +165,8 @@ func goBuildCheck(test *testCase, wd string, bctx *build.Context, gen []byte) er
 		BuildTags:   bctx.BuildTags,
 		ReleaseTags: bctx.ReleaseTags,
 	}
-	if err := runGo(realBuildCtx, "build", "-o", testExePath, genPkg.ImportPath); err != nil {
+	buildDir := filepath.Join(gopath, "src", genPkg.ImportPath)
+	if err := runGo(realBuildCtx, buildDir, "build", "-o", testExePath); err != nil {
 		return fmt.Errorf("build: %v", err)
 	}
 
@@ -342,7 +350,7 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 		if !*setup.Record {
 			wantWireOutput, err = ioutil.ReadFile(filepath.Join(root, "want", "wire_gen.go"))
 			if err != nil {
-				return nil, fmt.Errorf("load test case %s: %v. If this is a new testcase, run with -record to generate the wire_gen.go file.", name, err)
+				return nil, fmt.Errorf("load test case %s: %v, if this is a new testcase, run with -record to generate the wire_gen.go file", name, err)
 			}
 		}
 		wantProgramOutput, err = ioutil.ReadFile(filepath.Join(root, "want", "program_out.txt"))
@@ -368,7 +376,7 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 		if err != nil {
 			return err
 		}
-		goFiles[rel] = data
+		goFiles[filepath.Join("example.com", rel)] = data
 		return nil
 	})
 	if err != nil {
@@ -576,10 +584,45 @@ func (test *testCase) materialize(gopath string) error {
 	return nil
 }
 
-func runGo(bctx *build.Context, args ...string) error {
+// writeGoMod generates go.mod files for the test package and its dependency.
+// The file structure looks like:
+//
+//	gopath/src/
+//
+//		example.com/
+//
+//			go.mod
+//				replaces dependency with local copied one
+//
+//			... (Packages to be built and tested)
+//				any Go files copied recursively
+//
+//		github.com/google/go-cloud/
+//
+//			go.mod
+//
+//			... (Dependency files copied)
+func writeGoMod(gopath string) error {
+	importPath := "example.com"
+	depPath := "github.com/google/go-cloud"
+	depLoc := filepath.Join(gopath, "src", filepath.FromSlash(depPath))
+	example := fmt.Sprintf("module %s\n\nreplace %s => %s\n", importPath, depPath, depLoc)
+	gomod := filepath.Join(gopath, "src", importPath, "go.mod")
+	if err := ioutil.WriteFile(gomod, []byte(example), 0666); err != nil {
+		return fmt.Errorf("generate go.mod for %s: %v", gomod, err)
+	}
+	if err := ioutil.WriteFile(filepath.Join(depLoc, "go.mod"), []byte("module "+depPath), 0666); err != nil {
+		return fmt.Errorf("generate go.mod for %s: %v", depPath, err)
+	}
+	return nil
+}
+
+// runGo runs a go command in dir.
+func runGo(bctx *build.Context, dir string, args ...string) error {
 	exe := filepath.Join(bctx.GOROOT, "bin", "go")
 	c := exec.Command(exe, args...)
 	c.Env = append(os.Environ(), "GOROOT="+bctx.GOROOT, "GOARCH="+bctx.GOARCH, "GOOS="+bctx.GOOS, "GOPATH="+bctx.GOPATH)
+	c.Dir = dir
 	if bctx.CgoEnabled {
 		c.Env = append(c.Env, "CGO_ENABLED=1")
 	} else {
