@@ -16,3 +16,8 @@ func injectFooBar() *FooBar {
 	}
 	return fooBar
 }
+
+func injectEmptyStruct() *Empty {
+	empty := &Empty{}
+	return empty
+}

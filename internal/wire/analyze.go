@@ -147,11 +147,11 @@ dfs:
 			p := pv.Provider()
 			src := set.srcMap.At(curr.t).(*providerSetSrc)
 			used = append(used, src)
-			if !types.Identical(p.Out, curr.t) {
+			if concrete := pv.ConcreteType(); !types.Identical(concrete, curr.t) {
 				// Interface binding.  Don't create a call ourselves.
-				i := index.At(p.Out)
+				i := index.At(concrete)
 				if i == nil {
-					stk = append(stk, curr, frame{t: p.Out, from: curr.t})
+					stk = append(stk, curr, frame{t: concrete, from: curr.t})
 					continue
 				}
 				index.Set(curr.t, i)
@@ -323,20 +323,23 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 
 	// Process non-binding providers in new set.
 	for _, p := range set.Providers {
-		if providerMap.At(p.Out) != nil {
-			ec.add(bindingConflictError(fset, p.Pos, p.Out, setMap.At(p.Out).(*ProviderSet)))
-			continue
+		src := &providerSetSrc{Provider: p}
+		for _, typ := range p.Out {
+			if providerMap.At(typ) != nil {
+				ec.add(bindingConflictError(fset, p.Pos, typ, setMap.At(typ).(*ProviderSet)))
+				continue
+			}
+			providerMap.Set(typ, &ProvidedType{t: typ, p: p})
+			srcMap.Set(typ, src)
+			setMap.Set(typ, set)
 		}
-		providerMap.Set(p.Out, p)
-		srcMap.Set(p.Out, &providerSetSrc{Provider: p})
-		setMap.Set(p.Out, set)
 	}
 	for _, v := range set.Values {
 		if providerMap.At(v.Out) != nil {
 			ec.add(bindingConflictError(fset, v.Pos, v.Out, setMap.At(v.Out).(*ProviderSet)))
 			continue
 		}
-		providerMap.Set(v.Out, v)
+		providerMap.Set(v.Out, &ProvidedType{t: v.Out, v: v})
 		srcMap.Set(v.Out, &providerSetSrc{Value: v})
 		setMap.Set(v.Out, set)
 	}
@@ -388,36 +391,40 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 				continue
 			}
 			visited.Set(head, true)
-			switch x := providerMap.At(head).(type) {
-			case nil:
+			x := providerMap.At(head)
+			if x == nil {
 				// Leaf: input.
-			case *Value:
+				continue
+			}
+			pt := x.(*ProvidedType)
+			if pt.IsValue() {
 				// Leaf: values do not have dependencies.
-			case *Provider:
-				for _, arg := range x.Args {
-					a := arg.Type
-					hasCycle := false
-					for i, b := range curr {
-						if types.Identical(a, b) {
-							sb := new(strings.Builder)
-							fmt.Fprintf(sb, "cycle for %s:\n", types.TypeString(a, nil))
-							for j := i; j < len(curr); j++ {
-								p := providerMap.At(curr[j]).(*Provider)
-								fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.ImportPath, p.Name)
-							}
-							fmt.Fprintf(sb, "%s\n", types.TypeString(a, nil))
-							ec.add(errors.New(sb.String()))
-							hasCycle = true
-							break
+				continue
+			}
+			if !pt.IsProvider() {
+				panic("invalid provider map value")
+			}
+			for _, arg := range pt.Provider().Args {
+				a := arg.Type
+				hasCycle := false
+				for i, b := range curr {
+					if types.Identical(a, b) {
+						sb := new(strings.Builder)
+						fmt.Fprintf(sb, "cycle for %s:\n", types.TypeString(a, nil))
+						for j := i; j < len(curr); j++ {
+							p := providerMap.At(curr[j]).(*ProvidedType).Provider()
+							fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.ImportPath, p.Name)
 						}
-					}
-					if !hasCycle {
-						next := append(append([]types.Type(nil), curr...), a)
-						stk = append(stk, next)
+						fmt.Fprintf(sb, "%s\n", types.TypeString(a, nil))
+						ec.add(errors.New(sb.String()))
+						hasCycle = true
+						break
 					}
 				}
-			default:
-				panic("invalid provider map value")
+				if !hasCycle {
+					next := append(append([]types.Type(nil), curr...), a)
+					stk = append(stk, next)
+				}
 			}
 		}
 	}

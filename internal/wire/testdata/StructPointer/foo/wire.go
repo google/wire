@@ -24,3 +24,8 @@ func injectFooBar() *FooBar {
 	wire.Build(Set)
 	return nil
 }
+
+func injectEmptyStruct() *Empty {
+	wire.Build(Empty{})
+	return nil
+}

@@ -22,7 +22,8 @@ import (
 
 func main() {
 	fb := injectFooBar()
-	fmt.Println(fb.Foo, fb.Bar)
+	e := injectEmptyStruct()
+	fmt.Printf("%d %d %v\n", fb.Foo, fb.Bar, e)
 }
 
 type Foo int
@@ -32,6 +33,8 @@ type FooBar struct {
 	Foo Foo
 	Bar Bar
 }
+
+type Empty struct{}
 
 func provideFoo() Foo {
 	return 41
