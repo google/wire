@@ -13,7 +13,7 @@ import (
 
 func injectFooBar() FooBar {
 	foo := provideFoo()
-	bar2 := bar.ProvideBar()
-	fooBar := provideFooBar(foo, bar2)
+	barBar := bar.ProvideBar()
+	fooBar := provideFooBar(foo, barBar)
 	return fooBar
 }

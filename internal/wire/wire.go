@@ -234,7 +234,8 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 			}
 			if g.values[c.valueExpr] == "" {
 				t := c.valueTypeInfo.TypeOf(c.valueExpr)
-				name := disambiguate("_wire"+export(typeVariableName(t))+"Value", g.nameInFileScope)
+
+				name := typeVariableName(t, "", func(name string) string { return "_wire" + export(name) + "Value" }, g.nameInFileScope)
 				g.values[c.valueExpr] = name
 				pendingVars = append(pendingVars, pendingVar{
 					name:     name,
@@ -472,12 +473,11 @@ func injectPass(name string, params *types.Tuple, injectSig outputSignature, cal
 		pi := params.At(i)
 		a := pi.Name()
 		if a == "" || a == "_" {
-			a = unexport(typeVariableName(pi.Type()))
-			if a == "" {
-				a = "arg"
-			}
+			a = typeVariableName(pi.Type(), "arg", unexport, ig.nameInInjector)
+		} else {
+			a = disambiguate(a, ig.nameInInjector)
 		}
-		ig.paramNames = append(ig.paramNames, disambiguate(a, ig.nameInInjector))
+		ig.paramNames = append(ig.paramNames, a)
 		ig.p("%s %s", ig.paramNames[i], types.TypeString(pi.Type(), ig.g.qualifyPkg))
 	}
 	outTypeString := types.TypeString(injectSig.out, ig.g.qualifyPkg)
@@ -493,11 +493,7 @@ func injectPass(name string, params *types.Tuple, injectSig outputSignature, cal
 	}
 	for i := range calls {
 		c := &calls[i]
-		lname := unexport(typeVariableName(c.out))
-		if lname == "" {
-			lname = "v"
-		}
-		lname = disambiguate(lname, ig.nameInInjector)
+		lname := typeVariableName(c.out, "v", unexport, ig.nameInInjector)
 		ig.localNames = append(ig.localNames, lname)
 		switch c.kind {
 		case structProvider:
@@ -661,22 +657,53 @@ func zeroValue(t types.Type, qf types.Qualifier) string {
 	}
 }
 
-// typeVariableName invents a variable name derived from the type name
-// or returns the empty string if one could not be found. There are no
-// guarantees about whether the name is exported or unexported: call
-// export() or unexport() to convert.
-func typeVariableName(t types.Type) string {
+// typeVariableName invents a disambiguated variable name derived from the type name.
+// If no name can be derived from the type, defaultName is used.
+// transform is used to transform the derived name(s) (including defaultName);
+// commonly used functions include export and unexport.
+// collides is used to see if a name is ambiguous. If any one of the derived
+// names is unambiguous, it used; otherwise, the first derived name is
+// disambiguated using disambiguate().
+func typeVariableName(t types.Type, defaultName string, transform func(string) string, collides func(string) bool) string {
 	if p, ok := t.(*types.Pointer); ok {
 		t = p.Elem()
 	}
+	var names []string
 	switch t := t.(type) {
 	case *types.Basic:
-		return t.Name()
+		if t.Name() != "" {
+			names = append(names, t.Name())
+		}
 	case *types.Named:
-		// TODO(light): Include package name when appropriate.
-		return t.Obj().Name()
+		obj := t.Obj()
+		if name := obj.Name(); name != "" {
+			names = append(names, name)
+		}
+		// Provide an alternate name prefixed with the package name if possible.
+		// E.g., in case of collisions, we'll use "fooCfg" instead of "cfg2".
+		if pkg := obj.Pkg(); pkg != nil && pkg.Name() != "" {
+			names = append(names, fmt.Sprintf("%s%s", pkg.Name(), strings.Title(obj.Name())))
+		}
 	}
-	return ""
+
+	// If we were unable to derive a name, use defaultName.
+	if len(names) == 0 {
+		names = append(names, defaultName)
+	}
+
+	// Transform the name(s).
+	for i, name := range names {
+		names[i] = transform(name)
+	}
+
+	// See if there's an unambiguous name; if so, use it.
+	for _, name := range names {
+		if !collides(name) {
+			return name
+		}
+	}
+	// Otherwise, disambiguate the first name.
+	return disambiguate(names[0], collides)
 }
 
 // unexport converts a name that is potentially exported to an unexported name.

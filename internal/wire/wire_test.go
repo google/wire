@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"go/build"
+	"go/types"
 	"io"
 	"io/ioutil"
 	"os"
@@ -242,30 +243,80 @@ func TestExport(t *testing.T) {
 	}
 }
 
+func TestTypeVariableName(t *testing.T) {
+	var (
+		boolT           = types.Typ[types.Bool]
+		stringT         = types.Typ[types.String]
+		fooVarT         = types.NewNamed(types.NewTypeName(0, nil, "foo", stringT), stringT, nil)
+		nonameVarT      = types.NewNamed(types.NewTypeName(0, nil, "", stringT), stringT, nil)
+		barVarInFooPkgT = types.NewNamed(types.NewTypeName(0, types.NewPackage("my.example/foo", "foo"), "bar", stringT), stringT, nil)
+	)
+	tests := []struct {
+		description     string
+		typ             types.Type
+		defaultName     string
+		transformAppend string
+		collides        map[string]bool
+		want            string
+	}{
+		{"basic type", boolT, "", "", map[string]bool{}, "bool"},
+		{"basic type with transform", boolT, "", "suffix", map[string]bool{}, "boolsuffix"},
+		{"basic type with collision", boolT, "", "", map[string]bool{"bool": true}, "bool2"},
+		{"basic type with transform and collision", boolT, "", "suffix", map[string]bool{"boolsuffix": true}, "boolsuffix2"},
+		{"a different basic type", stringT, "", "", map[string]bool{}, "string"},
+		{"named type", fooVarT, "", "", map[string]bool{}, "foo"},
+		{"named type with transform", fooVarT, "", "suffix", map[string]bool{}, "foosuffix"},
+		{"named type with collision", fooVarT, "", "", map[string]bool{"foo": true}, "foo2"},
+		{"named type with transform and collision", fooVarT, "", "suffix", map[string]bool{"foosuffix": true}, "foosuffix2"},
+		{"noname type", nonameVarT, "bar", "", map[string]bool{}, "bar"},
+		{"noname type with transform", nonameVarT, "bar", "s", map[string]bool{}, "bars"},
+		{"noname type with transform and collision", nonameVarT, "bar", "s", map[string]bool{"bars": true}, "bars2"},
+		{"var in pkg type", barVarInFooPkgT, "", "", map[string]bool{}, "bar"},
+		{"var in pkg type with collision", barVarInFooPkgT, "", "", map[string]bool{"bar": true}, "fooBar"},
+		{"var in pkg type with double collision", barVarInFooPkgT, "", "", map[string]bool{"bar": true, "fooBar": true}, "bar2"},
+	}
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%s: typeVariableName(%v, %q, %q, %v)", test.description, test.typ, test.defaultName, test.transformAppend, test.collides), func(t *testing.T) {
+			got := typeVariableName(test.typ, test.defaultName, func(name string) string { return name + test.transformAppend }, func(name string) bool { return test.collides[name] })
+			if !isIdent(got) {
+				t.Errorf("%q is not an identifier", got)
+			}
+			if got != test.want {
+				t.Errorf("got %q want %q", got, test.want)
+			}
+			if test.collides[got] {
+				t.Errorf("%q collides", got)
+			}
+		})
+	}
+}
+
 func TestDisambiguate(t *testing.T) {
 	tests := []struct {
 		name     string
-		contains string
+		want     string
 		collides map[string]bool
 	}{
 		{"foo", "foo", nil},
-		{"foo", "foo", map[string]bool{"foo": true}},
-		{"foo", "foo", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
-		{"foo1", "foo", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
-		{"foo\u0661", "foo", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
-		{"foo\u0661", "foo", map[string]bool{"foo": true, "foo1": true, "foo2": true, "foo\u0661": true}},
+		{"foo", "foo2", map[string]bool{"foo": true}},
+		{"foo", "foo3", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
+		{"foo1", "foo1_2", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
+		{"foo\u0661", "foo\u0661", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
+		{"foo\u0661", "foo\u06612", map[string]bool{"foo": true, "foo1": true, "foo2": true, "foo\u0661": true}},
 	}
 	for _, test := range tests {
-		got := disambiguate(test.name, func(name string) bool { return test.collides[name] })
-		if !isIdent(got) {
-			t.Errorf("disambiguate(%q, %v) = %q; not an identifier", test.name, test.collides, got)
-		}
-		if !strings.Contains(got, test.contains) {
-			t.Errorf("disambiguate(%q, %v) = %q; wanted to contain %q", test.name, test.collides, got, test.contains)
-		}
-		if test.collides[got] {
-			t.Errorf("disambiguate(%q, %v) = %q; ", test.name, test.collides, got)
-		}
+		t.Run(fmt.Sprintf("disambiguate(%q, %v)", test.name, test.collides), func(t *testing.T) {
+			got := disambiguate(test.name, func(name string) bool { return test.collides[name] })
+			if !isIdent(got) {
+				t.Errorf("%q is not an identifier", got)
+			}
+			if got != test.want {
+				t.Errorf("got %q want %q", got, test.want)
+			}
+			if test.collides[got] {
+				t.Errorf("%q collides", got)
+			}
+		})
 	}
 }
 
