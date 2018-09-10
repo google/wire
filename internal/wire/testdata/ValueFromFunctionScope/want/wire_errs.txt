@@ -1,0 +1,1 @@
+inject injectBar: value int can't be used: f is not declared in package scope

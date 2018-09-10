@@ -765,9 +765,15 @@ func accessibleFrom(info *types.Info, node ast.Node, wantPkg string) error {
 			// Local package names are fine, since we can just reimport them.
 			return true
 		}
-		if pkg := obj.Pkg(); pkg != nil && !ast.IsExported(ident.Name) && pkg.Path() != wantPkg {
-			unexportError = fmt.Errorf("uses unexported identifier %s", obj.Name())
-			return false
+		if pkg := obj.Pkg(); pkg != nil {
+			if !ast.IsExported(ident.Name) && pkg.Path() != wantPkg {
+				unexportError = fmt.Errorf("uses unexported identifier %s", obj.Name())
+				return false
+			}
+			if obj.Parent() != pkg.Scope() {
+				unexportError = fmt.Errorf("%s is not declared in package scope", obj.Name())
+				return false
+			}
 		}
 		return true
 	})
