@@ -7,9 +7,9 @@ package main
 
 import (
 	context2 "context"
-	fmt "fmt"
-	os "os"
-	reflect "reflect"
+	"fmt"
+	"os"
+	"reflect"
 )
 
 // Injectors from foo.go:

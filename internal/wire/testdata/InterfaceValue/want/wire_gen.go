@@ -6,8 +6,8 @@
 package main
 
 import (
-	io "io"
-	strings "strings"
+	"io"
+	"strings"
 )
 
 // Injectors from wire.go:

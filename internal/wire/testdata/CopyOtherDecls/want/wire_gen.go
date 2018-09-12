@@ -6,7 +6,7 @@
 package main
 
 import (
-	fmt "fmt"
+	"fmt"
 )
 
 // Injectors from foo.go:

@@ -134,11 +134,18 @@ func copyNonInjectorDecls(g *gen, files []*ast.File, info *types.Info) {
 	}
 }
 
+// importInfo holds info about an import.
+type importInfo struct {
+	name string
+	// fullpath is the full, possibly vendored, path.
+	fullpath string
+}
+
 // gen is the file-wide generator state.
 type gen struct {
 	currPackage string
 	buf         bytes.Buffer
-	imports     map[string]string
+	imports     map[string]*importInfo
 	values      map[ast.Expr]string
 	prog        *loader.Program // for positions and determining package names
 }
@@ -146,7 +153,7 @@ type gen struct {
 func newGen(prog *loader.Program, pkg string) *gen {
 	return &gen{
 		currPackage: pkg,
-		imports:     make(map[string]string),
+		imports:     make(map[string]*importInfo),
 		values:      make(map[ast.Expr]string),
 		prog:        prog,
 	}
@@ -172,9 +179,13 @@ func (g *gen) frame() []byte {
 		}
 		sort.Strings(imps)
 		for _, path := range imps {
-			// TODO(light): Omit the local package identifier if it matches
-			// the package name.
-			fmt.Fprintf(&buf, "\t%s %q\n", g.imports[path], path)
+			// Omit the local package identifier if it matches the package name.
+			info := g.imports[path]
+			if g.prog.Package(info.fullpath).Pkg.Name() == info.name {
+				fmt.Fprintf(&buf, "\t%q\n", path)
+			} else {
+				fmt.Fprintf(&buf, "\t%s %q\n", info.name, path)
+			}
 		}
 		buf.WriteString(")\n\n")
 	}
@@ -414,21 +425,21 @@ func (g *gen) qualifyImport(path string) string {
 	if i := strings.LastIndex(path, vendorPart); i != -1 && (i == 0 || path[i-1] == '/') {
 		unvendored = path[i+len(vendorPart):]
 	}
-	if name := g.imports[unvendored]; name != "" {
-		return name
+	if info := g.imports[unvendored]; info != nil {
+		return info.name
 	}
 	// TODO(light): Use parts of import path to disambiguate.
 	name := disambiguate(g.prog.Package(path).Pkg.Name(), func(n string) bool {
 		// Don't let an import take the "err" name. That's annoying.
 		return n == "err" || g.nameInFileScope(n)
 	})
-	g.imports[unvendored] = name
+	g.imports[unvendored] = &importInfo{name: name, fullpath: path}
 	return name
 }
 
 func (g *gen) nameInFileScope(name string) bool {
 	for _, other := range g.imports {
-		if other == name {
+		if other.name == name {
 			return true
 		}
 	}

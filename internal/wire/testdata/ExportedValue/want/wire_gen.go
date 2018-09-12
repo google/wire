@@ -6,7 +6,7 @@
 package main
 
 import (
-	bar "example.com/bar"
+	"example.com/bar"
 )
 
 // Injectors from wire.go:

@@ -6,7 +6,7 @@
 package main
 
 import (
-	os "os"
+	"os"
 )
 
 // Injectors from wire.go:
