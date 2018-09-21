@@ -72,10 +72,6 @@ func TestWire(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			if test.name == "Vendor" && os.Getenv("GO111MODULE") != "off" {
-				// TODO: Remove the GO111MODULE check when it is not relevant (maybe after Go 1.12).
-				t.Skip("Skipped testing for vendored package for Go module turned on, see https://github.com/google/go-cloud/issues/326")
-			}
 			t.Parallel()
 
 			// Run Wire from a fake build context.
@@ -167,7 +163,11 @@ func goBuildCheck(test *testCase, wd string, bctx *build.Context, gen []byte) er
 		ReleaseTags: bctx.ReleaseTags,
 	}
 	buildDir := filepath.Join(gopath, "src", genPkg.ImportPath)
-	if err := runGo(realBuildCtx, buildDir, "build", "-o", testExePath); err != nil {
+	buildCmd := []string{"build", "-o", testExePath}
+	if test.name == "Vendor" && os.Getenv("GO111MODULE") == "on" {
+		buildCmd = append(buildCmd, "-mod=vendor")
+	}
+	if err := runGo(realBuildCtx, buildDir, buildCmd...); err != nil {
 		return fmt.Errorf("build: %v", err)
 	}
 
