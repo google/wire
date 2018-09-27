@@ -1,0 +1,1 @@
+provider for example.com/foo.Foo returns error but injection not allowed to fail
