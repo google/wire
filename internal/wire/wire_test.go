@@ -303,6 +303,8 @@ func TestDisambiguate(t *testing.T) {
 		{"foo1", "foo1_2", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
 		{"foo\u0661", "foo\u0661", map[string]bool{"foo": true, "foo1": true, "foo2": true}},
 		{"foo\u0661", "foo\u06612", map[string]bool{"foo": true, "foo1": true, "foo2": true, "foo\u0661": true}},
+		{"select", "select2", nil},
+		{"var", "var2", nil},
 	}
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("disambiguate(%q, %v)", test.name, test.collides), func(t *testing.T) {
