@@ -453,3 +453,24 @@ You may not:
     `*Greeter` will be broken.
 -   Add a provider for `io.Writer` to `GreeterSet`. Injectors might already have
     a provider for `io.Writer` which might conflict with this one.
+
+### Mocking
+
+There are two approaches for creating an injected app with mocked dependencies.
+Examples of both approaches are shown
+[here](https://github.com/google/go-cloud/tree/master/wire/internal/wire/testdata/ExampleWithMocks/foo).
+
+#### Approach A: Pass mocks to the injector
+
+Create a test-only injector that takes all of the mocks as arguments; the
+argument types must be the interface types the mocks are mocking. `wire.Build`
+can't include providers for the mocked dependencies without creating conflicts,
+so if you're using provider set(s) you will need to define one that doesn't
+include the mocked types.
+
+#### Approach B: Return the mocks from the injector
+
+Create a new struct that includes the app plus all of the dependencies you want
+to mock. Create a test-only injector that returns this struct, give it providers
+for the concrete mock types, and use `wire.Bind` to tell Wire that the
+concrete mock types should be used to fulfill the appropriate interface.
