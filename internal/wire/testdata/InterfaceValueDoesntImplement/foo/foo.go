@@ -12,16 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build wireinject
-
 package main
 
-import (
-	"github.com/google/go-cloud/wire"
-)
+import "fmt"
 
-func injectedMessage() string {
-	// wrong: arg0 must be a pointer to an interface.
-	wire.Build(wire.InterfaceValue("foo", "bar"))
-	return ""
+func main() {
+	fmt.Println(injectedMessage())
 }

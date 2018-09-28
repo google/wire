@@ -21,6 +21,7 @@ import (
 )
 
 func injectedMessage() string {
+	// wrong: InterfaceValue requires 2 args.
 	wire.Build(wire.InterfaceValue("foo"))
 	return ""
 }

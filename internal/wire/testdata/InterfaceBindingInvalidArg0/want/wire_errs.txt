@@ -1,0 +1,1 @@
+first argument to Bind must be a pointer to an interface type; found string

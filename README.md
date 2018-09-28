@@ -237,6 +237,23 @@ interface type and the second argument is a zero value of the concrete type. Any
 set that includes an interface binding must also have a provider in the same set
 that provides the concrete type.
 
+If necessary, you can also bind one interface to another:
+
+```go
+type FooerPlus interface {
+  Fooer
+  Bar() String
+}
+
+func ProviderFooerPlus() FooerPlus {
+  ...
+}
+
+var FooerPlusAsFooer = wire.NewSet(
+  ProvideFooerPlus,
+  wire.Bind(new(Fooer), *new(FooerPlus)))
+```
+
 [type identity]: https://golang.org/ref/spec#Type_identity
 [return concrete types]: https://github.com/golang/go/wiki/CodeReviewComments#interfaces
 

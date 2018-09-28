@@ -18,10 +18,11 @@ package main
 
 import (
 	"github.com/google/go-cloud/wire"
+	"io"
 )
 
 func injectedMessage() string {
-	// wrong: arg0 must be a pointer to an interface.
-	wire.Build(wire.InterfaceValue("foo", "bar"))
+	// wrong: string doesn't implement io.Reader.
+	wire.Build(wire.InterfaceValue(new(io.Reader), "bar"))
 	return ""
 }

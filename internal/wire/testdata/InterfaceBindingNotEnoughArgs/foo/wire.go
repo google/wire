@@ -20,8 +20,8 @@ import (
 	"github.com/google/go-cloud/wire"
 )
 
-func injectedMessage() string {
-	// wrong: arg0 must be a pointer to an interface.
-	wire.Build(wire.InterfaceValue("foo", "bar"))
-	return ""
+func injectFooer() Fooer {
+	// wrong: wire.Bind requires 2 args.
+	wire.Build(wire.Bind((*Fooer)(nil)))
+	return nil
 }

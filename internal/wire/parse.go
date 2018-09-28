@@ -680,22 +680,23 @@ func processBind(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*If
 	ifaceArgType := info.TypeOf(call.Args[0])
 	ifacePtr, ok := ifaceArgType.(*types.Pointer)
 	if !ok {
-		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("first argument to bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
+		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("first argument to Bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
 	}
-	methodSet, ok := ifacePtr.Elem().Underlying().(*types.Interface)
+	iface := ifacePtr.Elem()
+	methodSet, ok := iface.Underlying().(*types.Interface)
 	if !ok {
-		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("first argument to bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
+		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("first argument to Bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
 	}
 	provided := info.TypeOf(call.Args[1])
-	if types.Identical(ifacePtr.Elem(), provided) {
+	if types.Identical(iface, provided) {
 		return nil, notePosition(fset.Position(call.Pos()), errors.New("cannot bind interface to itself"))
 	}
 	if !types.Implements(provided, methodSet) {
-		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("%s does not implement %s", types.TypeString(provided, nil), types.TypeString(ifaceArgType, nil)))
+		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("%s does not implement %s", types.TypeString(provided, nil), types.TypeString(iface, nil)))
 	}
 	return &IfaceBinding{
 		Pos:      call.Pos(),
-		Iface:    ifacePtr.Elem(),
+		Iface:    iface,
 		Provided: provided,
 	}, nil
 }
@@ -764,7 +765,7 @@ func processInterfaceValue(fset *token.FileSet, info *types.Info, call *ast.Call
 	}
 	provided := info.TypeOf(call.Args[1])
 	if !types.Implements(provided, methodSet) {
-		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("%s does not implement %s", types.TypeString(provided, nil), types.TypeString(ifaceArgType, nil)))
+		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("%s does not implement %s", types.TypeString(provided, nil), types.TypeString(iface, nil)))
 	}
 	return &Value{
 		Pos:  call.Args[1].Pos(),
