@@ -23,19 +23,19 @@ Wire has two core concepts: providers and injectors.
 
 ### Defining Providers
 
-The primary mechanism in Wire is the **provider**: a function that can
-produce a value. These functions are ordinary Go code.
+The primary mechanism in Wire is the **provider**: a function that can produce a
+value. These functions are ordinary Go code.
 
 ```go
 package foobarbaz
 
 type Foo struct {
-	X int
+    X int
 }
 
 // ProvideFoo returns a Foo.
 func ProvideFoo() Foo {
-	return Foo{X: 42}
+    return Foo{X: 42}
 }
 ```
 
@@ -50,12 +50,12 @@ package foobarbaz
 // ...
 
 type Bar struct {
-	X int
+    X int
 }
 
 // ProvideBar returns a Bar: a negative Foo.
 func ProvideBar(foo Foo) Bar {
-	return Bar{X: -foo.X}
+    return Bar{X: -foo.X}
 }
 ```
 
@@ -65,22 +65,22 @@ Providers can also return errors:
 package foobarbaz
 
 import (
-	"context"
-	"errors"
+    "context"
+    "errors"
 )
 
 // ...
 
 type Baz struct {
-	X int
+    X int
 }
 
 // ProvideBaz returns a value if Bar is not zero.
 func ProvideBaz(ctx context.Context, bar Bar) (Baz, error) {
-	if bar.X == 0 {
-		return Baz{}, errors.New("cannot provide baz when bar is zero")
-	}
-	return Baz{X: bar.X}, nil
+    if bar.X == 0 {
+        return Baz{}, errors.New("cannot provide baz when bar is zero")
+    }
+    return Baz{X: bar.X}, nil
 }
 ```
 
@@ -92,8 +92,8 @@ called `SuperSet`, use the `wire.NewSet` function:
 package foobarbaz
 
 import (
-	// ...
-	"github.com/google/go-cloud/wire"
+    // ...
+    "github.com/google/go-cloud/wire"
 )
 
 // ...
@@ -107,8 +107,8 @@ You can also add other provider sets into a provider set.
 package foobarbaz
 
 import (
-	// ...
-	"example.com/some/other/pkg"
+    // ...
+    "example.com/some/other/pkg"
 )
 
 // ...
@@ -136,22 +136,22 @@ say that the above providers were defined in a package called
 package main
 
 import (
-	"context"
+    "context"
 
-	"github.com/google/go-cloud/wire"
-	"example.com/foobarbaz"
+    "github.com/google/go-cloud/wire"
+    "example.com/foobarbaz"
 )
 
 func initializeBaz(ctx context.Context) (foobarbaz.Baz, error) {
-	wire.Build(foobarbaz.MegaSet)
-	return foobarbaz.Baz{}, nil
+    wire.Build(foobarbaz.MegaSet)
+    return foobarbaz.Baz{}, nil
 }
 ```
 
 Like providers, injectors can be parameterized on inputs (which then get sent to
 providers) and can return errors. Arguments to `wire.Build` are the same as
-`wire.NewSet`: they form a provider set. This is the provider set that gets
-used during code generation for that injector.
+`wire.NewSet`: they form a provider set. This is the provider set that gets used
+during code generation for that injector.
 
 Any non-injector declarations found in a file with injectors will be copied into
 the generated file.
@@ -174,17 +174,17 @@ Wire will produce an implementation of the injector in a file called
 package main
 
 import (
-	"example.com/foobarbaz"
+    "example.com/foobarbaz"
 )
 
 func initializeBaz(ctx context.Context) (foobarbaz.Baz, error) {
-	foo := foobarbaz.ProvideFoo()
-	bar := foobarbaz.ProvideBar(foo)
-	baz, err := foobarbaz.ProvideBaz(ctx, bar)
-	if err != nil {
-		return 0, err
-	}
-	return baz, nil
+    foo := foobarbaz.ProvideFoo()
+    bar := foobarbaz.ProvideBar(foo)
+    baz, err := foobarbaz.ProvideBaz(ctx, bar)
+    if err != nil {
+        return 0, err
+    }
+    return baz, nil
 }
 ```
 
@@ -206,36 +206,36 @@ injectors.
 Frequently, dependency injection is used to bind a concrete implementation for
 an interface. Wire matches inputs to outputs via [type identity][], so the
 inclination might be to create a provider that returns an interface type.
-However, this would not be idiomatic, since the Go best practice is to [return
-concrete types][]. Instead, you can declare an interface binding in a provider
-set:
+However, this would not be idiomatic, since the Go best practice is to
+[return concrete types][]. Instead, you can declare an interface binding in a
+provider set:
 
 ```go
 type Fooer interface {
-	Foo() string
+    Foo() string
 }
 
 type Bar string
 
 func (b *Bar) Foo() string {
-	return string(*b)
+    return string(*b)
 }
 
 func ProvideBar() *Bar {
-	b := new(Bar)
-	*b = "Hello, World!"
-	return b
+    b := new(Bar)
+    *b = "Hello, World!"
+    return b
 }
 
 var BarFooer = wire.NewSet(
-	ProvideBar,
-	wire.Bind(new(Fooer), new(Bar)))
+    ProvideBar,
+    wire.Bind(new(Fooer), new(Bar)))
 ```
 
 The first argument to `wire.Bind` is a pointer to a value of the desired
-interface type and the second argument is a zero value of the concrete type.
-Any set that includes an interface binding must also have a provider in the
-same set that provides the concrete type.
+interface type and the second argument is a zero value of the concrete type. Any
+set that includes an interface binding must also have a provider in the same set
+that provides the concrete type.
 
 [type identity]: https://golang.org/ref/spec#Type_identity
 [return concrete types]: https://github.com/golang/go/wiki/CodeReviewComments#interfaces
@@ -252,35 +252,35 @@ type Foo int
 type Bar int
 
 func ProvideFoo() Foo {
-	// ...
+    // ...
 }
 
 func ProvideBar() Bar {
-	// ...
+    // ...
 }
 
 type FooBar struct {
-	Foo Foo
-	Bar Bar
+    Foo Foo
+    Bar Bar
 }
 
 var Set = wire.NewSet(
-	ProvideFoo,
-	ProvideBar,
-	FooBar{})
+    ProvideFoo,
+    ProvideBar,
+    FooBar{})
 ```
 
 A generated injector for `FooBar` would look like this:
 
 ```go
 func injectFooBar() FooBar {
-	foo := ProvideFoo()
-	bar := ProvideBar()
-	fooBar := FooBar{
-		Foo: foo,
-		Bar: bar,
-	}
-	return fooBar
+    foo := ProvideFoo()
+    bar := ProvideBar()
+    fooBar := FooBar{
+        Foo: foo,
+        Bar: bar,
+    }
+    return fooBar
 }
 ```
 
@@ -289,17 +289,17 @@ And similarly if the injector needed a `*FooBar`.
 ### Binding Values
 
 Occasionally, it is useful to bind a basic value (usually `nil`) to a type.
-Instead of having injectors depend on a throwaway provider function, you can
-add a value expression to a provider set.
+Instead of having injectors depend on a throwaway provider function, you can add
+a value expression to a provider set.
 
 ```go
 type Foo struct {
-	X int
+    X int
 }
 
 func injectFoo() Foo {
-	wire.Build(wire.Value(Foo{X: 42}))
-	return Foo{}
+    wire.Build(wire.Value(Foo{X: 42}))
+    return Foo{}
 }
 ```
 
@@ -307,24 +307,25 @@ The generated injector would look like this:
 
 ```go
 func injectFoo() Foo {
-	foo := Foo{X: 42}
-	return foo
+    foo := Foo{X: 42}
+    return foo
 }
 ```
 
 It's important to note that the expression will be copied to the injector's
-package; references to variables will be evaluated during the injector
-package's initialization. Wire will emit an error if the expression calls
-any functions or receives from any channels.
+package; references to variables will be evaluated during the injector package's
+initialization. Wire will emit an error if the expression calls any functions or
+receives from any channels.
 
 For interface values, use `InterfaceValue`:
 
 ```go
 func injectReader() io.Reader {
-	wire.Build(wire.InterfaceValue(new(io.Reader), os.Stdin))
-	return Foo{}
+    wire.Build(wire.InterfaceValue(new(io.Reader), os.Stdin))
+    return Foo{}
 }
 ```
+
 ### Cleanup functions
 
 If a provider creates a value that needs to be cleaned up (e.g. closing a file),
@@ -335,16 +336,16 @@ returns an error.
 
 ```go
 func provideFile(log Logger, path Path) (*os.File, func(), error) {
-	f, err := os.Open(string(path))
-	if err != nil {
-		return nil, nil, err
-	}
-	cleanup := func() {
-		if err := f.Close(); err != nil {
-			log.Log(err)
-		}
-	}
-	return f, cleanup, nil
+    f, err := os.Open(string(path))
+    if err != nil {
+        return nil, nil, err
+    }
+    cleanup := func() {
+        if err := f.Close(); err != nil {
+            log.Log(err)
+        }
+    }
+    return f, cleanup, nil
 }
 ```
 
@@ -359,7 +360,7 @@ injector function declaration, you can instead write it more concisely with a
 
 ```go
 func injectFoo() Foo {
-	panic(wire.Build(/* ... */))
+    panic(wire.Build(/* ... */))
 }
 ```
 
@@ -370,8 +371,8 @@ over time.
 
 ### Distinguishing Types
 
-If you need to inject a common type like `string`, create a new string type
-to avoid conflicts with other providers. For example:
+If you need to inject a common type like `string`, create a new string type to
+avoid conflicts with other providers. For example:
 
 ```go
 type MySQLConnectionString string
@@ -384,14 +385,14 @@ an options struct.
 
 ```go
 type Options struct {
-	// Messages is the set of recommended greetings.
-	Messages []Message
-	// Writer is the location to send greetings. nil goes to stdout.
-	Writer io.Writer
+    // Messages is the set of recommended greetings.
+    Messages []Message
+    // Writer is the location to send greetings. nil goes to stdout.
+    Writer io.Writer
 }
 
 func NewGreeter(ctx context.Context, opts *Options) (*Greeter, error) {
-	// ...
+    // ...
 }
 
 var GreeterSet = wire.NewSet(Options{}, NewGreeter)
@@ -402,19 +403,19 @@ var GreeterSet = wire.NewSet(Options{}, NewGreeter)
 When creating a provider set for use in a library, the only changes you can make
 without breaking compatibility are:
 
--  Change which provider a provider set uses to provide a specific output, as
-   long as it does not introduce a new input to the provider set. It may remove
-   inputs. However, note that existing injectors will use the old provider until
-   they are regenerated.
--  Introduce a new output type into the provider set, but only if the type itself
-   is newly added. If the type is not new, it is possible that some injector
-   already has the output type included, which would cause a conflict.
+-   Change which provider a provider set uses to provide a specific output, as
+    long as it does not introduce a new input to the provider set. It may remove
+    inputs. However, note that existing injectors will use the old provider
+    until they are regenerated.
+-   Introduce a new output type into the provider set, but only if the type
+    itself is newly added. If the type is not new, it is possible that some
+    injector already has the output type included, which would cause a conflict.
 
 All other changes are not safe. This includes:
 
--  Requiring a new input in the provider set.
--  Removing an output type from a provider set.
--  Adding an existing output type into the provider set.
+-   Requiring a new input in the provider set.
+-   Removing an output type from a provider set.
+-   Adding an existing output type into the provider set.
 
 Instead of making one of these breaking changes, consider adding a new provider
 set.
@@ -425,30 +426,30 @@ As an example, if you have a provider set like this:
 var GreeterSet = wire.NewSet(NewStdoutGreeter)
 
 func DefaultGreeter(ctx context.Context) *Greeter {
-	// ...
+    // ...
 }
 
 func NewStdoutGreeter(ctx context.Context, msgs []Message) *Greeter {
-	// ...
+    // ...
 }
 
 func NewGreeter(ctx context.Context, w io.Writer, msgs []Message) (*Greeter, error) {
-	// ...
+    // ...
 }
 ```
 
 You may:
 
--  Use `DefaultGreeter` instead of `NewStdoutGreeter` in `GreeterSet`.
--  Create a new type `T` and add a provider for `T` to `GreeterSet`, as long as
-   `T` is introduced in the same commit/release as the provider is added.
+-   Use `DefaultGreeter` instead of `NewStdoutGreeter` in `GreeterSet`.
+-   Create a new type `T` and add a provider for `T` to `GreeterSet`, as long as
+    `T` is introduced in the same commit/release as the provider is added.
 
 You may not:
 
--  Use `NewGreeter` instead of `NewStdoutGreeter` in `GreeterSet`. This both
-   adds an input type (`io.Writer`) and requires injectors to return an `error`
-   where the provider of `*Greeter` did not require this before.
--  Remove `NewStdoutGreeter` from `GreeterSet`. Injectors depending on
-   `*Greeter` will be broken.
--  Add a provider for `io.Writer` to `GreeterSet`. Injectors might already have
-   a provider for `io.Writer` which might conflict with this one.
+-   Use `NewGreeter` instead of `NewStdoutGreeter` in `GreeterSet`. This both
+    adds an input type (`io.Writer`) and requires injectors to return an `error`
+    where the provider of `*Greeter` did not require this before.
+-   Remove `NewStdoutGreeter` from `GreeterSet`. Injectors depending on
+    `*Greeter` will be broken.
+-   Add a provider for `io.Writer` to `GreeterSet`. Injectors might already have
+    a provider for `io.Writer` which might conflict with this one.
