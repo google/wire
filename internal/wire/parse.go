@@ -38,6 +38,37 @@ type providerSetSrc struct {
 	Import   *ProviderSet
 }
 
+// trace returns a slice of strings describing the (possibly recursive) source
+// of p, including line numbers.
+func (p *providerSetSrc) trace(fset *token.FileSet, typ types.Type) []string {
+	quoted := func(s string) string {
+		if s == "" {
+			return ""
+		}
+		return fmt.Sprintf("%q ", s)
+	}
+	var retval []string
+	if p.Provider != nil {
+		kind := "provider"
+		if p.Provider.IsStruct {
+			kind = "struct provider"
+		}
+		retval = append(retval, fmt.Sprintf("%s %s(%s)", kind, quoted(p.Provider.Name), fset.Position(p.Provider.Pos)))
+	} else if p.Binding != nil {
+		retval = append(retval, fmt.Sprintf("wire.Bind (%s)", fset.Position(p.Binding.Pos)))
+	} else if p.Value != nil {
+		retval = append(retval, fmt.Sprintf("wire.Value (%s)", fset.Position(p.Value.Pos)))
+	} else if p.Import != nil {
+		if parent := p.Import.srcMap.At(typ); parent != nil {
+			retval = append(retval, parent.(*providerSetSrc).trace(fset, typ)...)
+		}
+		retval = append(retval, fmt.Sprintf("provider set %s(%s)", quoted(p.Import.VarName), fset.Position(p.Import.Pos)))
+	} else {
+		panic("providerSetSrc with no fields set")
+	}
+	return retval
+}
+
 // A ProviderSet describes a set of providers.  The zero value is an empty
 // ProviderSet.
 type ProviderSet struct {
