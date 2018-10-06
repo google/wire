@@ -339,7 +339,7 @@ For interface values, use `InterfaceValue`:
 ```go
 func injectReader() io.Reader {
     wire.Build(wire.InterfaceValue(new(io.Reader), os.Stdin))
-    return Foo{}
+    return nil
 }
 ```
 
