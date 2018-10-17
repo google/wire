@@ -17,7 +17,9 @@ package main
 import "fmt"
 
 func main() {
-	fmt.Println(injectBaz())
+	fmt.Println(injectMissingOutputType())
+	fmt.Println(injectMultipleMissingTypes())
+	fmt.Println(injectMissingRecursiveType())
 }
 
 type Foo int
@@ -25,5 +27,21 @@ type Bar int
 type Baz int
 
 func provideBaz(foo Foo, bar Bar) Baz {
+	return 0
+}
+
+type Zip int
+type Zap int
+type Zop int
+
+func provideZip(foo Foo) Zip {
+	return 0
+}
+
+func provideZap(zip Zip) Zap {
+	return 0
+}
+
+func provideZop(zap Zap) Zop {
 	return 0
 }

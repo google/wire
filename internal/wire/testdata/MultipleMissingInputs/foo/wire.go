@@ -20,7 +20,23 @@ import (
 	"github.com/google/go-cloud/wire"
 )
 
-func injectBaz() Baz {
+func injectMissingOutputType() Foo {
+	// Error: no provider for Foo.
+	wire.Build()
+	return Foo(0)
+}
+
+func injectMultipleMissingTypes() Baz {
+	// Error: provideBaz needs Foo and Bar, both missing.
 	wire.Build(provideBaz)
 	return Baz(0)
+}
+
+func injectMissingRecursiveType() Zop {
+	// Error:
+	// Zop  -> Zap -> Zip -> Foo
+	// provideZop needs Zap, provideZap needs Zip, provideZip needs Foo,
+	// which is missing.
+	wire.Build(provideZop, provideZap, provideZip)
+	return Zop(0)
 }
