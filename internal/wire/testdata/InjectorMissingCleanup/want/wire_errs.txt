@@ -1,1 +1,1 @@
-provider for example.com/foo.Foo returns cleanup but injection does not return cleanup function
+/wire_gopath/src/example.com/foo/wire.go:x:y: inject injectFoo: provider for example.com/foo.Foo returns cleanup but injection does not return cleanup function

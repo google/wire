@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -81,15 +82,22 @@ func TestWire(t *testing.T) {
 				defer t.Logf("wire_gen.go:\n%s", gen)
 			}
 			if len(errs) > 0 {
-				for _, e := range errs {
-					t.Log(e)
+				gotErrStrings := make([]string, len(errs))
+				for i, e := range errs {
+					gotErrStrings[i] = scrubError(e.Error())
+					t.Log(gotErrStrings[i])
 				}
 				if !test.wantWireError {
-					t.Fatal("Did not expect errors.")
+					t.Fatal("Did not expect errors. To -record an error, create want/wire_errs.txt.")
 				}
-				for _, s := range test.wantWireErrorStrings {
-					if !errorListContains(errs, s) {
-						t.Errorf("Errors did not contain %q", s)
+				if *setup.Record {
+					wireErrsFile := filepath.Join(testRoot, test.name, "want", "wire_errs.txt")
+					if err := ioutil.WriteFile(wireErrsFile, []byte(strings.Join(gotErrStrings, "\n\n")), 0666); err != nil {
+						t.Fatalf("failed to write wire_errs.txt file: %v", err)
+					}
+				} else {
+					if diff := cmp.Diff(gotErrStrings, test.wantWireErrorStrings); diff != "" {
+						t.Errorf("Errors didn't match expected errors from wire_errors.txt:\n%s", diff)
 					}
 				}
 				return
@@ -359,6 +367,14 @@ type testCase struct {
 	wantWireErrorStrings []string
 }
 
+var scrubLineNumberAndPositionRegex = regexp.MustCompile("\\.go:[\\d]+:[\\d]+")
+var scrubLineNumberRegex = regexp.MustCompile("\\.go:[\\d]+")
+
+func scrubError(s string) string {
+	s = scrubLineNumberAndPositionRegex.ReplaceAllString(s, ".go:x:y")
+	return scrubLineNumberRegex.ReplaceAllString(s, ".go:x")
+}
+
 // loadTestCase reads a test case from a directory.
 //
 // The directory structure is:
@@ -375,8 +391,11 @@ type testCase struct {
 //		want/
 //
 //			wire_errs.txt
-//					expected errors from the Wire Generate function,
-//					missing if no errors expected
+//					Expected errors from the Wire Generate function,
+//					missing if no errors expected.
+//					Distinct errors are separated by a blank line,
+//					and line numbers and line positions are scrubbed
+//					(e.g., "foo.go:52:8" --> "foo.go:x:y").
 //
 //			wire_gen.go
 //					verified output of wire from a test run with
@@ -398,7 +417,7 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 	wantWireError := err == nil
 	var wantWireErrorStrings []string
 	if wantWireError {
-		wantWireErrorStrings = strings.Split(strings.TrimSpace(string(wireErrb)), "\n")
+		wantWireErrorStrings = strings.Split(scrubError(string(wireErrb)), "\n\n")
 	} else {
 		if !*setup.Record {
 			wantWireOutput, err = ioutil.ReadFile(filepath.Join(root, "want", "wire_gen.go"))
@@ -690,13 +709,4 @@ func runGo(bctx *build.Context, dir string, args ...string) error {
 		return err
 	}
 	return nil
-}
-
-func errorListContains(errs []error, substr string) bool {
-	for _, e := range errs {
-		if strings.Contains(e.Error(), substr) {
-			return true
-		}
-	}
-	return false
 }

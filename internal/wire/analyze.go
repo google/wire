@@ -20,6 +20,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/types/typeutil"
@@ -381,7 +382,10 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 	visited := new(typeutil.Map) // to bool
 	visited.SetHasher(hasher)
 	ec := new(errorCollector)
-	for _, root := range providerMap.Keys() {
+	// Sort output types so that errors about cycles are consistent.
+	outputs := providerMap.Keys()
+	sort.Slice(outputs, func(i, j int) bool { return types.TypeString(outputs[i], nil) < types.TypeString(outputs[j], nil) })
+	for _, root := range outputs {
 		// Depth-first search using a stack of trails through the provider map.
 		stk := [][]types.Type{{root}}
 		for len(stk) > 0 {

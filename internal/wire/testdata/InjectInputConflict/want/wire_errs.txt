@@ -1,2 +1,1 @@
-foo.Foo
-conflicts with provider
+/wire_gopath/src/example.com/foo/wire.go:x:y: inject injectBar: input of example.com/foo.Foo conflicts with provider provideFoo at /wire_gopath/src/example.com/foo/foo.go:x:y

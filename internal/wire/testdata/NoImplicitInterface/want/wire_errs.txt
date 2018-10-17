@@ -1,2 +1,1 @@
-no provider found
-Fooer
+/wire_gopath/src/example.com/foo/wire.go:x:y: inject injectFooer: no provider found for example.com/foo.Fooer, output of injector

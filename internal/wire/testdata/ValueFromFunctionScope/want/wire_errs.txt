@@ -1,1 +1,1 @@
-inject injectBar: value int can't be used: f is not declared in package scope
+/wire_gopath/src/example.com/foo/wire.go:x:y: inject injectBar: value int can't be used: f is not declared in package scope

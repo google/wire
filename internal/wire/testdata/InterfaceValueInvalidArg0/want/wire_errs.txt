@@ -1,1 +1,1 @@
-first argument to InterfaceValue must be a pointer to an interface type; found string
+/wire_gopath/src/example.com/foo/wire.go:x:y: first argument to InterfaceValue must be a pointer to an interface type; found string
