@@ -20,7 +20,7 @@ type ProviderSet struct{}
 
 // NewSet creates a new provider set that includes the providers in
 // its arguments. Each argument is either an exported function value,
-// an exported struct (zero) value, a provider set, a call to Bind, a
+// an exported struct (zero) value, a provider set, a call to Bind,
 // a call to Value, or a call to InterfaceValue.
 func NewSet(...interface{}) ProviderSet {
 	return ProviderSet{}
