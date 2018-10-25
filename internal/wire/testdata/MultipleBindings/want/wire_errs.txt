@@ -1,11 +1,41 @@
-/wire_gopath/src/example.com/foo/wire.go:x:y: wire.Build has multiple bindings for example.com/foo.Foo (current binding: provider "provideFooAgain" (/wire_gopath/src/example.com/foo/foo.go:x:y); previous binding: provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+/wire_gopath/src/example.com/foo/wire.go:x:y: wire.Build has multiple bindings for example.com/foo.Foo
+current:
+<- provider "provideFooAgain" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+previous:
+<- provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y)
 
-/wire_gopath/src/example.com/foo/wire.go:x:y: wire.Build has multiple bindings for example.com/foo.Foo (current binding: provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y); previous binding: provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y) <- provider set "Set" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+/wire_gopath/src/example.com/foo/wire.go:x:y: wire.Build has multiple bindings for example.com/foo.Foo
+current:
+<- provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+previous:
+<- provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+<- provider set "Set" (/wire_gopath/src/example.com/foo/foo.go:x:y)
 
-/wire_gopath/src/example.com/foo/wire.go:x:y: wire.Build has multiple bindings for example.com/foo.Foo (current binding: provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y); previous binding: provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y) <- provider set "Set" (/wire_gopath/src/example.com/foo/foo.go:x:y) <- provider set "SuperSet" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+/wire_gopath/src/example.com/foo/wire.go:x:y: wire.Build has multiple bindings for example.com/foo.Foo
+current:
+<- provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+previous:
+<- provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+<- provider set "Set" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+<- provider set "SuperSet" (/wire_gopath/src/example.com/foo/foo.go:x:y)
 
-/wire_gopath/src/example.com/foo/foo.go:x:y: SetWithDuplicateBindings has multiple bindings for example.com/foo.Foo (current binding: provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y) <- provider set "Set" (/wire_gopath/src/example.com/foo/foo.go:x:y) <- provider set "SuperSet" (/wire_gopath/src/example.com/foo/foo.go:x:y); previous binding: provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y) <- provider set "Set" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+/wire_gopath/src/example.com/foo/foo.go:x:y: SetWithDuplicateBindings has multiple bindings for example.com/foo.Foo
+current:
+<- provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+<- provider set "Set" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+<- provider set "SuperSet" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+previous:
+<- provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+<- provider set "Set" (/wire_gopath/src/example.com/foo/foo.go:x:y)
 
-/wire_gopath/src/example.com/foo/wire.go:x:y: wire.Build has multiple bindings for example.com/foo.Foo (current binding: wire.Value (/wire_gopath/src/example.com/foo/wire.go:x:y); previous binding: provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+/wire_gopath/src/example.com/foo/wire.go:x:y: wire.Build has multiple bindings for example.com/foo.Foo
+current:
+<- wire.Value (/wire_gopath/src/example.com/foo/wire.go:x:y)
+previous:
+<- provider "provideFoo" (/wire_gopath/src/example.com/foo/foo.go:x:y)
 
-/wire_gopath/src/example.com/foo/wire.go:x:y: wire.Build has multiple bindings for example.com/foo.Bar (current binding: wire.Bind (/wire_gopath/src/example.com/foo/wire.go:x:y); previous binding: provider "provideBar" (/wire_gopath/src/example.com/foo/foo.go:x:y)
+/wire_gopath/src/example.com/foo/wire.go:x:y: wire.Build has multiple bindings for example.com/foo.Bar
+current:
+<- wire.Bind (/wire_gopath/src/example.com/foo/wire.go:x:y)
+previous:
+<- provider "provideBar" (/wire_gopath/src/example.com/foo/foo.go:x:y)

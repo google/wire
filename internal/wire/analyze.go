@@ -141,11 +141,12 @@ dfs:
 				index.Set(curr.t, errAbort)
 				continue
 			}
-			neededBy := []string{types.TypeString(curr.t, nil)}
+			sb := new(strings.Builder)
+			fmt.Fprintf(sb, "no provider found for %s", types.TypeString(curr.t, nil))
 			for f := curr.up; f != nil; f = f.up {
-				neededBy = append(neededBy, fmt.Sprintf("%s in %s", types.TypeString(f.t, nil), set.srcMap.At(f.t).(*providerSetSrc).description(fset, f.t)))
+				fmt.Fprintf(sb, "\nneeded by %s in %s", types.TypeString(f.t, nil), set.srcMap.At(f.t).(*providerSetSrc).description(fset, f.t))
 			}
-			ec.add(fmt.Errorf("no provider found for %s", strings.Join(neededBy, ", needed by ")))
+			ec.add(errors.New(sb.String()))
 			index.Set(curr.t, errAbort)
 			continue
 		case pv.IsProvider():
@@ -445,8 +446,8 @@ func bindingConflictError(fset *token.FileSet, typ types.Type, set *ProviderSet,
 	} else {
 		fmt.Fprintf(sb, set.VarName)
 	}
-	fmt.Fprintf(sb, " has multiple bindings for %s (", types.TypeString(typ, nil))
-	fmt.Fprintf(sb, "current binding: %s", strings.Join(cur.trace(fset, typ), " <- "))
-	fmt.Fprintf(sb, "; previous binding: %s", strings.Join(prev.trace(fset, typ), " <- "))
+	fmt.Fprintf(sb, " has multiple bindings for %s\n", types.TypeString(typ, nil))
+	fmt.Fprintf(sb, "current:\n<- %s\n", strings.Join(cur.trace(fset, typ), "\n<- "))
+	fmt.Fprintf(sb, "previous:\n<- %s", strings.Join(prev.trace(fset, typ), "\n<- "))
 	return notePosition(fset.Position(set.Pos), errors.New(sb.String()))
 }
