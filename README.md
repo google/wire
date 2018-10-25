@@ -7,7 +7,10 @@ global variables. Because Wire operates without runtime state or reflection,
 code written to be used with Wire is useful even for hand-written
 initialization.
 
+For an overview, see the [introductory blog post][].
+
 [dependency injection]: https://en.wikipedia.org/wiki/Dependency_injection
+[introductory blog post]: https://blog.golang.org/wire
 
 ## Installing
 
@@ -491,3 +494,115 @@ Create a new struct that includes the app plus all of the dependencies you want
 to mock. Create a test-only injector that returns this struct, give it providers
 for the concrete mock types, and use `wire.Bind` to tell Wire that the
 concrete mock types should be used to fulfill the appropriate interface.
+
+## Frequently Asked Questions
+
+### How does Wire relate to other Go dependency injection tools?
+
+Other dependency injection tools for Go like [dig][] or [facebookgo/inject][]
+are based on reflection. Wire runs as a code generator, which means that the
+injector works without making calls to a runtime library. This enables easier
+introspection of initialization and correct cross-references for tooling like
+[guru][].
+
+[dig]: https://github.com/uber-go/dig
+[facebookgo/inject]: https://github.com/facebookgo/inject
+[guru]: https://golang.org/s/using-guru
+
+### How does Wire relate to other non-Go dependency injection tools (like Dagger 2)?
+
+Wire's approach was inspired by [Dagger 2][]. However, it is not the aim of Wire
+to emulate dependency injection tools from other languages: the design space and
+requirements are quite different. For example, the Go compiler does not support
+anything like Java's annotation processing mechanisms. The difference in
+languages and their idioms necessarily requires different approaches in
+primitives and API.
+
+[Dagger 2]: https://google.github.io/dagger/
+
+### Why is Wire part of Go Cloud?
+
+Wire was designed to reduce the toil in setting up the multitude of dependencies
+often found when interacting with common cloud providers. However, Wire is not
+coupled to Go Cloud or cloud servers: Wire is a standalone tool.
+
+The Go Cloud team is investigating splitting out Wire as its own repository.
+Follow [#513][] for updates.
+
+[#513]: https://github.com/google/go-cloud/issues/513
+
+### Why use pseudo-functions to create provider sets or injectors?
+
+In the early prototypes, Wire directives were specially formatted comments. This
+seemed appealing at first glance as this meant no compile-time or runtime
+impact. However, this unstructured approach becomes opaque to other tooling not
+written for Wire. Tools like [`gorename`][] or [guru][] would not be able to
+recognize references to the identifiers existing in comments without being
+specially modified to understand Wire's comment format. By moving the references
+into no-op function calls, Wire interoperates seamlessly with other Go tooling.
+
+[`gorename`]: https://godoc.org/golang.org/x/tools/cmd/gorename
+
+### What if my dependency graph has two dependencies of the same type?
+
+This most frequently appears with common types like `string`. An example of this
+problem would be:
+
+```go
+type Foo struct { /* ... */ }
+type Bar struct { /* ... */ }
+
+func newFoo1() *Foo { /* ... */ }
+func newFoo2() *Foo { /* ... */ }
+func newBar(foo1 *Foo, foo2 *Foo) *Bar { /* ... */ }
+
+func inject() *Bar {
+	// ERROR! Multiple providers for *Foo.
+	wire.Build(newFoo1, newFoo2, newBar)
+	return nil
+}
+```
+
+Wire does not allow multiple providers for one type to exist in the transitive
+closure of the providers presented to `wire.Build`, as this is usually a
+mistake. For legitimate cases where you need multiple dependencies of the same
+type, you need to invent a new type to call this other dependency. For example,
+you can name OAuth credentials after the service they connect to. Once you have
+a suitable different type, you can wrap and unwrap the type when plumbing it
+through Wire. Continuing our above example:
+
+```go
+type OtherFoo Foo
+
+func newOtherFoo() *OtherFoo {
+	// Call the original provider...
+	foo := newFoo2()
+	// ...then convert it to the new type.
+	return (*OtherFoo)(foo)
+}
+
+func provideBar(foo1 *Foo, otherFoo *OtherFoo) *Bar {
+	// Convert the new type into the unwrapped type...
+	foo2 := (*Foo)(otherFoo)
+	// ...then use it to call the original provider.
+	return newBar(foo1, foo2)
+}
+
+func inject() *Bar {
+	wire.Build(newFoo1, newOtherFoo, provideBar)
+	return nil
+}
+```
+
+### Should I use Wire for small applications?
+
+Probably not. Wire is designed to automate more intricate setup code found in
+larger applications. For small applications, hand-wiring dependencies is
+simpler.
+
+### Who is using Wire?
+
+Wire is still fairly new and doesn't have a large user base yet. However, we
+have heard a lot of interest from Go users wanting to simplify their
+applications. If your project or company uses Wire, please let us know by either
+emailing us or sending a pull request amending this section.
