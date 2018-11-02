@@ -17,12 +17,10 @@
 package main
 
 import (
-	"example.com/bar"
 	"github.com/google/go-cloud/wire"
 )
 
-func injectedMessage() string {
-	// Fails because bar.Value references unexported bar.privateMsg.
-	wire.Build(bar.Value)
-	return ""
+func injectFoo() Foo {
+	wire.Build(wire.Value(Foo{X: 42}))
+	return Foo{}
 }

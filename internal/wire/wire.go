@@ -845,7 +845,7 @@ func accessibleFrom(info *types.Info, node ast.Node, wantPkg string) error {
 				unexportError = fmt.Errorf("uses unexported identifier %s", obj.Name())
 				return false
 			}
-			if obj.Parent() != pkg.Scope() {
+			if obj.Parent() != nil && obj.Parent() != pkg.Scope() {
 				unexportError = fmt.Errorf("%s is not declared in package scope", obj.Name())
 				return false
 			}

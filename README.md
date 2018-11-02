@@ -327,9 +327,13 @@ The generated injector would look like this:
 
 ```go
 func injectFoo() Foo {
-    foo := Foo{X: 42}
+    foo := _wireFooValue
     return foo
 }
+
+var (
+    _wireFooValue = Foo{X: 42}
+)
 ```
 
 It's important to note that the expression will be copied to the injector's

@@ -12,17 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build wireinject
+package bar
 
-package main
-
-import (
-	"example.com/bar"
-	"github.com/google/go-cloud/wire"
-)
-
-func injectedMessage() string {
-	// Fails because bar.Value references unexported bar.privateMsg.
-	wire.Build(bar.Value)
-	return ""
+var foo struct {
+	X int
 }
+
+

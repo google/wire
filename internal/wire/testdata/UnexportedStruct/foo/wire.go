@@ -21,8 +21,8 @@ import (
 	"github.com/google/go-cloud/wire"
 )
 
-func injectedMessage() string {
-	// Fails because bar.Value references unexported bar.privateMsg.
-	wire.Build(bar.Value)
+func injectedBar() string {
+	// Fails because bar.foo is unexported.
+	wire.Build(bar.foo.X)
 	return ""
 }
