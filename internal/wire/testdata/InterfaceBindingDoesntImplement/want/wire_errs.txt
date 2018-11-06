@@ -1,1 +1,1 @@
-/wire_gopath/src/example.com/foo/wire.go:x:y: string does not implement example.com/foo.Fooer
+example.com/foo/wire.go:x:y: string does not implement example.com/foo.Fooer

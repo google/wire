@@ -1,1 +1,1 @@
-/wire_gopath/src/example.com/foo/wire.go:x:y: too few arguments in call to wire.Bind
+example.com/foo/wire.go:x:y: too few arguments in call to wire.Bind

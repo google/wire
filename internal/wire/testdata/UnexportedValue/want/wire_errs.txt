@@ -1,1 +1,1 @@
-/wire_gopath/src/example.com/foo/wire.go:x:y: inject injectedMessage: value string can't be used: uses unexported identifier privateMsg
+example.com/foo/wire.go:x:y: inject injectedMessage: value string can't be used: uses unexported identifier privateMsg

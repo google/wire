@@ -16,21 +16,16 @@ package wire
 
 import (
 	"bytes"
-	"errors"
+	"context"
 	"fmt"
 	"go/build"
 	"go/types"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"runtime"
-	"sort"
 	"strings"
 	"testing"
-	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -63,29 +58,39 @@ func TestWire(t *testing.T) {
 		}
 		tests = append(tests, test)
 	}
-	wd := filepath.Join(magicGOPATH(), "src")
 
+	var goToolPath string
 	if *setup.Record {
-		if _, err := os.Stat(filepath.Join(build.Default.GOROOT, "bin", "go")); err != nil {
+		goToolPath = filepath.Join(build.Default.GOROOT, "bin", "go")
+		if _, err := os.Stat(goToolPath); err != nil {
 			t.Fatal("go toolchain not available:", err)
 		}
 	}
+	ctx := context.Background()
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Run Wire from a fake build context.
-			bctx := test.buildContext()
-			gen, errs := Generate(bctx, wd, test.pkg)
-			if len(gen) > 0 {
-				defer t.Logf("wire_gen.go:\n%s", gen)
+			// Materialize a temporary GOPATH directory.
+			gopath, err := ioutil.TempDir("", "wire_test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(gopath)
+			if err := test.materialize(gopath); err != nil {
+				t.Fatal(err)
+			}
+			wd := filepath.Join(gopath, "src", "example.com")
+			gen, errs := Generate(ctx, wd, append(os.Environ(), "GOPATH="+gopath), test.pkg)
+			if len(gen.Content) > 0 {
+				defer t.Logf("wire_gen.go:\n%s", gen.Content)
 			}
 			if len(errs) > 0 {
 				gotErrStrings := make([]string, len(errs))
 				for i, e := range errs {
-					gotErrStrings[i] = scrubError(e.Error())
-					t.Log(gotErrStrings[i])
+					t.Log(e.Error())
+					gotErrStrings[i] = scrubError(gopath, e.Error())
 				}
 				if !test.wantWireError {
 					t.Fatal("Did not expect errors. To -record an error, create want/wire_errs.txt.")
@@ -105,26 +110,37 @@ func TestWire(t *testing.T) {
 			if test.wantWireError {
 				t.Fatal("wire succeeded; want error")
 			}
+			outPathSane := true
+			if prefix := gopath + string(os.PathSeparator) + "src" + string(os.PathSeparator); !strings.HasPrefix(gen.Path, prefix) {
+				outPathSane = false
+				t.Errorf("suggested output path = %q; want to start with %q", gen.Path, prefix)
+			}
 
 			if *setup.Record {
 				// Record ==> Build the generated Wire code,
 				// check that the program's output matches the
 				// expected output, save wire output on
 				// success.
-				if err := goBuildCheck(test, wd, bctx, gen); err != nil {
+				if !outPathSane {
+					return
+				}
+				if err := gen.Commit(); err != nil {
+					t.Fatalf("failed to write wire_gen.go to test GOPATH: %v", err)
+				}
+				if err := goBuildCheck(goToolPath, gopath, test); err != nil {
 					t.Fatalf("go build check failed: %v", err)
 				}
-				wireGenFile := filepath.Join(testRoot, test.name, "want", "wire_gen.go")
-				if err := ioutil.WriteFile(wireGenFile, gen, 0666); err != nil {
-					t.Fatalf("failed to write wire_gen.go file: %v", err)
+				testdataWireGenPath := filepath.Join(testRoot, test.name, "want", "wire_gen.go")
+				if err := ioutil.WriteFile(testdataWireGenPath, gen.Content, 0666); err != nil {
+					t.Fatalf("failed to record wire_gen.go to testdata: %v", err)
 				}
 			} else {
 				// Replay ==> Load golden file and compare to
 				// generated result. This check is meant to
 				// detect non-deterministic behavior in the
 				// Generate function.
-				if !bytes.Equal(gen, test.wantWireOutput) {
-					gotS, wantS := string(gen), string(test.wantWireOutput)
+				if !bytes.Equal(gen.Content, test.wantWireOutput) {
+					gotS, wantS := string(gen.Content), string(test.wantWireOutput)
 					diff := cmp.Diff(strings.Split(gotS, "\n"), strings.Split(wantS, "\n"))
 					t.Fatalf("wire output differs from golden file. If this change is expected, run with -record to update the wire_gen.go file.\n*** got:\n%s\n\n*** want:\n%s\n\n*** diff:\n%s", gotS, wantS, diff)
 				}
@@ -133,49 +149,27 @@ func TestWire(t *testing.T) {
 	}
 }
 
-func goBuildCheck(test *testCase, wd string, bctx *build.Context, gen []byte) error {
-	// Find the absolute import path, since test.pkg may be a relative
-	// import path.
-	genPkg, err := bctx.Import(test.pkg, wd, build.FindOnly)
-	if err != nil {
-		return err
-	}
-
-	// Run a `go build` with the generated output.
-	gopath, err := ioutil.TempDir("", "wire_test")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(gopath)
-	if err := test.materialize(gopath); err != nil {
-		return err
-	}
-	if len(gen) > 0 {
-		genPath := filepath.Join(gopath, "src", filepath.FromSlash(genPkg.ImportPath), "wire_gen.go")
-		if err := ioutil.WriteFile(genPath, gen, 0666); err != nil {
-			return err
-		}
-	}
+func goBuildCheck(goToolPath, gopath string, test *testCase) error {
+	// Write go.mod files for example.com and the wire package.
+	// TODO(#78): Move this to happen in materialize() once modules work.
 	if err := writeGoMod(gopath); err != nil {
 		return err
 	}
+
+	// Run `go build`.
 	testExePath := filepath.Join(gopath, "bin", "testprog")
-	realBuildCtx := &build.Context{
-		GOARCH:      bctx.GOARCH,
-		GOOS:        bctx.GOOS,
-		GOROOT:      bctx.GOROOT,
-		GOPATH:      gopath,
-		CgoEnabled:  bctx.CgoEnabled,
-		Compiler:    bctx.Compiler,
-		BuildTags:   bctx.BuildTags,
-		ReleaseTags: bctx.ReleaseTags,
-	}
-	buildDir := filepath.Join(gopath, "src", genPkg.ImportPath)
 	buildCmd := []string{"build", "-o", testExePath}
 	if test.name == "Vendor" && os.Getenv("GO111MODULE") == "on" {
 		buildCmd = append(buildCmd, "-mod=vendor")
 	}
-	if err := runGo(realBuildCtx, buildDir, buildCmd...); err != nil {
+	buildCmd = append(buildCmd, test.pkg)
+	cmd := exec.Command(goToolPath, buildCmd...)
+	cmd.Dir = filepath.Join(gopath, "src", "example.com")
+	cmd.Env = append(os.Environ(), "GOPATH="+gopath)
+	if buildOut, err := cmd.CombinedOutput(); err != nil {
+		if len(buildOut) > 0 {
+			return fmt.Errorf("build: %v; output:\n%s", err, buildOut)
+		}
 		return fmt.Errorf("build: %v", err)
 	}
 
@@ -332,29 +326,94 @@ func TestDisambiguate(t *testing.T) {
 
 func isIdent(s string) bool {
 	if len(s) == 0 {
-		if s == "foo" {
-			panic("BREAK3")
-		}
 		return false
 	}
 	r, i := utf8.DecodeRuneInString(s)
 	if !unicode.IsLetter(r) && r != '_' {
-		if s == "foo" {
-			panic("BREAK2")
-		}
 		return false
 	}
 	for i < len(s) {
 		r, sz := utf8.DecodeRuneInString(s[i:])
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
-			if s == "foo" {
-				panic("BREAK1")
-			}
 			return false
 		}
 		i += sz
 	}
 	return true
+}
+
+// scrubError rewrites the given string to remove occurrences of GOPATH/src,
+// rewrites OS-specific path separators to slashes, and any line/column
+// information to a fixed ":x:y". For example, if the gopath parameter is
+// "C:\GOPATH" and running on Windows, the string
+// "C:\GOPATH\src\foo\bar.go:15:4" would be rewritten to "foo/bar.go:x:y".
+func scrubError(gopath string, s string) string {
+	sb := new(strings.Builder)
+	query := gopath + string(os.PathSeparator) + "src" + string(os.PathSeparator)
+	for {
+		// Find next occurrence of source root. This indicates the next path to
+		// scrub.
+		start := strings.Index(s, query)
+		if start == -1 {
+			sb.WriteString(s)
+			break
+		}
+
+		// Find end of file name (extension ".go").
+		fileStart := start + len(query)
+		fileEnd := strings.Index(s[fileStart:], ".go")
+		if fileEnd == -1 {
+			// If no ".go" occurs to end of string, further searches will fail too.
+			// Break the loop.
+			sb.WriteString(s)
+			break
+		}
+		fileEnd += fileStart + 3 // Advance to end of extension.
+
+		// Write out file name and advance scrub position.
+		file := s[fileStart:fileEnd]
+		if os.PathSeparator != '/' {
+			file = strings.Replace(file, string(os.PathSeparator), "/", -1)
+		}
+		sb.WriteString(s[:start])
+		sb.WriteString(file)
+		s = s[fileEnd:]
+
+		// Peek past to see if there is line/column info.
+		linecol, linecolLen := scrubLineColumn(s)
+		sb.WriteString(linecol)
+		s = s[linecolLen:]
+	}
+	return sb.String()
+}
+
+func scrubLineColumn(s string) (replacement string, n int) {
+	if !strings.HasPrefix(s, ":") {
+		return "", 0
+	}
+	// Skip first colon and run of digits.
+	for n++; len(s) > n && '0' <= s[n] && s[n] <= '9'; {
+		n++
+	}
+	if n == 1 {
+		// No digits followed colon.
+		return "", 0
+	}
+
+	// Start on column part.
+	if !strings.HasPrefix(s[n:], ":") {
+		return ":x", n
+	}
+	lineEnd := n
+	// Skip second colon and run of digits.
+	for n++; len(s) > n && '0' <= s[n] && s[n] <= '9'; {
+		n++
+	}
+	if n == lineEnd+1 {
+		// No digits followed second colon.
+		return ":x", lineEnd
+	}
+	return ":x:y", n
 }
 
 type testCase struct {
@@ -365,14 +424,6 @@ type testCase struct {
 	wantWireOutput       []byte
 	wantWireError        bool
 	wantWireErrorStrings []string
-}
-
-var scrubLineNumberAndPositionRegex = regexp.MustCompile("\\.go:[\\d]+:[\\d]+")
-var scrubLineNumberRegex = regexp.MustCompile("\\.go:[\\d]+")
-
-func scrubError(s string) string {
-	s = scrubLineNumberAndPositionRegex.ReplaceAllString(s, ".go:x:y")
-	return scrubLineNumberRegex.ReplaceAllString(s, ".go:x")
 }
 
 // loadTestCase reads a test case from a directory.
@@ -395,7 +446,7 @@ func scrubError(s string) string {
 //					missing if no errors expected.
 //					Distinct errors are separated by a blank line,
 //					and line numbers and line positions are scrubbed
-//					(e.g., "foo.go:52:8" --> "foo.go:x:y").
+//					(e.g. "$GOPATH/src/foo.go:52:8" --> "foo.go:x:y").
 //
 //			wire_gen.go
 //					verified output of wire from a test run with
@@ -417,7 +468,7 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 	wantWireError := err == nil
 	var wantWireErrorStrings []string
 	if wantWireError {
-		wantWireErrorStrings = strings.Split(scrubError(string(wireErrb)), "\n\n")
+		wantWireErrorStrings = strings.Split(string(wireErrb), "\n\n")
 	} else {
 		if !*setup.Record {
 			wantWireOutput, err = ioutil.ReadFile(filepath.Join(root, "want", "wire_gen.go"))
@@ -448,7 +499,7 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 		if err != nil {
 			return err
 		}
-		goFiles[filepath.Join("example.com", rel)] = data
+		goFiles["example.com/"+filepath.ToSlash(rel)] = data
 		return nil
 	})
 	if err != nil {
@@ -465,187 +516,11 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 	}, nil
 }
 
-func (test *testCase) buildContext() *build.Context {
-	return &build.Context{
-		GOARCH:      build.Default.GOARCH,
-		GOOS:        build.Default.GOOS,
-		GOROOT:      build.Default.GOROOT,
-		GOPATH:      magicGOPATH(),
-		CgoEnabled:  build.Default.CgoEnabled,
-		Compiler:    build.Default.Compiler,
-		ReleaseTags: build.Default.ReleaseTags,
-		HasSubdir:   test.hasSubdir,
-		ReadDir:     test.readDir,
-		OpenFile:    test.openFile,
-		IsDir:       test.isDir,
-	}
-}
-
-const (
-	magicGOPATHUnix    = "/wire_gopath"
-	magicGOPATHWindows = `C:\wire_gopath`
-)
-
-func magicGOPATH() string {
-	if runtime.GOOS == "windows" {
-		return magicGOPATHWindows
-	}
-
-	return magicGOPATHUnix
-}
-
-func (test *testCase) hasSubdir(root, dir string) (rel string, ok bool) {
-	// Don't consult filesystem, just lexical.
-
-	if dir == root {
-		return "", true
-	}
-	prefix := root
-	if !strings.HasSuffix(prefix, string(filepath.Separator)) {
-		prefix += string(filepath.Separator)
-	}
-	if !strings.HasPrefix(dir, prefix) {
-		return "", false
-	}
-	return filepath.ToSlash(dir[len(prefix):]), true
-}
-
-func (test *testCase) resolve(path string) (resolved string, pathType int) {
-	subpath, isMagic := test.hasSubdir(magicGOPATH(), path)
-	if !isMagic {
-		return path, systemPath
-	}
-	if subpath == "src" {
-		return "", gopathRoot
-	}
-	const srcPrefix = "src/"
-	if !strings.HasPrefix(subpath, srcPrefix) {
-		return subpath, gopathRoot
-	}
-	return subpath[len(srcPrefix):], gopathSrc
-}
-
-// Path types
-const (
-	systemPath = iota
-	gopathRoot
-	gopathSrc
-)
-
-func (test *testCase) readDir(dir string) ([]os.FileInfo, error) {
-	rpath, pathType := test.resolve(dir)
-	switch {
-	case pathType == systemPath:
-		return ioutil.ReadDir(rpath)
-	case pathType == gopathRoot && rpath == "":
-		return []os.FileInfo{dirInfo{name: "src"}}, nil
-	case pathType == gopathSrc:
-		names := make([]string, 0, len(test.goFiles))
-		prefix := rpath + string(filepath.Separator)
-		for name := range test.goFiles {
-			if strings.HasPrefix(name, prefix) {
-				names = append(names, name[len(prefix):])
-			}
-		}
-		sort.Strings(names)
-		ents := make([]os.FileInfo, 0, len(names))
-		for _, name := range names {
-			if i := strings.IndexRune(name, filepath.Separator); i != -1 {
-				// Directory
-				dirName := name[:i]
-				if len(ents) == 0 || ents[len(ents)-1].Name() != dirName {
-					ents = append(ents, dirInfo{name: dirName})
-				}
-				continue
-			}
-			ents = append(ents, fileInfo{
-				name: name,
-				size: int64(len(test.goFiles[name])),
-			})
-		}
-		return ents, nil
-	default:
-		return nil, &os.PathError{
-			Op:   "open",
-			Path: dir,
-			Err:  os.ErrNotExist,
-		}
-	}
-}
-
-func (test *testCase) isDir(path string) bool {
-	rpath, pathType := test.resolve(path)
-	switch {
-	case pathType == systemPath:
-		info, err := os.Stat(rpath)
-		return err == nil && info.IsDir()
-	case pathType == gopathRoot && rpath == "":
-		return true
-	case pathType == gopathSrc:
-		prefix := rpath + string(filepath.Separator)
-		for name := range test.goFiles {
-			if strings.HasPrefix(name, prefix) {
-				return true
-			}
-		}
-		return false
-	default:
-		return false
-	}
-}
-
-type dirInfo struct {
-	name string
-}
-
-func (d dirInfo) Name() string       { return d.name }
-func (d dirInfo) Size() int64        { return 0 }
-func (d dirInfo) Mode() os.FileMode  { return os.ModeDir | os.ModePerm }
-func (d dirInfo) ModTime() time.Time { return time.Unix(0, 0) }
-func (d dirInfo) IsDir() bool        { return true }
-func (d dirInfo) Sys() interface{}   { return nil }
-
-type fileInfo struct {
-	name string
-	size int64
-}
-
-func (f fileInfo) Name() string       { return f.name }
-func (f fileInfo) Size() int64        { return f.size }
-func (f fileInfo) Mode() os.FileMode  { return os.ModeDir | 0666 }
-func (f fileInfo) ModTime() time.Time { return time.Unix(0, 0) }
-func (f fileInfo) IsDir() bool        { return false }
-func (f fileInfo) Sys() interface{}   { return nil }
-
-func (test *testCase) openFile(path string) (io.ReadCloser, error) {
-	rpath, pathType := test.resolve(path)
-	switch {
-	case pathType == systemPath:
-		return os.Open(path)
-	case pathType == gopathSrc:
-		content, ok := test.goFiles[rpath]
-		if !ok {
-			return nil, &os.PathError{
-				Op:   "open",
-				Path: path,
-				Err:  errors.New("does not exist or is not a file"),
-			}
-		}
-		return ioutil.NopCloser(bytes.NewReader(content)), nil
-	default:
-		return nil, &os.PathError{
-			Op:   "open",
-			Path: path,
-			Err:  errors.New("does not exist or is not a file"),
-		}
-	}
-}
-
 // materialize creates a new GOPATH at the given directory, which may or
 // may not exist.
 func (test *testCase) materialize(gopath string) error {
 	for name, content := range test.goFiles {
-		dst := filepath.Join(gopath, "src", name)
+		dst := filepath.Join(gopath, "src", filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(dst), 0777); err != nil {
 			return fmt.Errorf("materialize GOPATH: %v", err)
 		}
@@ -675,38 +550,16 @@ func (test *testCase) materialize(gopath string) error {
 //
 //			... (Dependency files copied)
 func writeGoMod(gopath string) error {
-	importPath := "example.com"
-	depPath := "github.com/google/go-cloud"
+	const importPath = "example.com"
+	const depPath = "github.com/google/go-cloud"
 	depLoc := filepath.Join(gopath, "src", filepath.FromSlash(depPath))
 	example := fmt.Sprintf("module %s\n\nreplace %s => %s\n", importPath, depPath, depLoc)
-	gomod := filepath.Join(gopath, "src", importPath, "go.mod")
+	gomod := filepath.Join(gopath, "src", filepath.FromSlash(importPath), "go.mod")
 	if err := ioutil.WriteFile(gomod, []byte(example), 0666); err != nil {
 		return fmt.Errorf("generate go.mod for %s: %v", gomod, err)
 	}
 	if err := ioutil.WriteFile(filepath.Join(depLoc, "go.mod"), []byte("module "+depPath), 0666); err != nil {
 		return fmt.Errorf("generate go.mod for %s: %v", depPath, err)
-	}
-	return nil
-}
-
-// runGo runs a go command in dir.
-func runGo(bctx *build.Context, dir string, args ...string) error {
-	exe := filepath.Join(bctx.GOROOT, "bin", "go")
-	c := exec.Command(exe, args...)
-	c.Env = append(os.Environ(), "GOROOT="+bctx.GOROOT, "GOARCH="+bctx.GOARCH, "GOOS="+bctx.GOOS, "GOPATH="+bctx.GOPATH)
-	c.Dir = dir
-	if bctx.CgoEnabled {
-		c.Env = append(c.Env, "CGO_ENABLED=1")
-	} else {
-		c.Env = append(c.Env, "CGO_ENABLED=0")
-	}
-	// TODO(someday): Set -compiler flag if needed.
-	out, err := c.CombinedOutput()
-	if err != nil {
-		if len(out) > 0 {
-			return fmt.Errorf("%v; output:\n%s", err, out)
-		}
-		return err
 	}
 	return nil
 }

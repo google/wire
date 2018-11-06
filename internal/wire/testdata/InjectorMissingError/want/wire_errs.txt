@@ -1,1 +1,1 @@
-/wire_gopath/src/example.com/foo/wire.go:x:y: inject injectFoo: provider for example.com/foo.Foo returns error but injection not allowed to fail
+example.com/foo/wire.go:x:y: inject injectFoo: provider for example.com/foo.Foo returns error but injection not allowed to fail

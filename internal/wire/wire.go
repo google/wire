@@ -18,13 +18,15 @@ package wire
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"go/ast"
-	"go/build"
 	"go/format"
 	"go/printer"
 	"go/token"
 	"go/types"
+	"io/ioutil"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -36,22 +38,50 @@ import (
 	"golang.org/x/tools/go/loader"
 )
 
+// GeneratedFile stores the content of a call to Generate and the
+// desired on-disk location of the file.
+type GeneratedFile struct {
+	Path    string
+	Content []byte
+}
+
+// Commit writes the generated file to disk.
+func (gen GeneratedFile) Commit() error {
+	if len(gen.Content) == 0 {
+		return nil
+	}
+	return ioutil.WriteFile(gen.Path, gen.Content, 0666)
+}
+
 // Generate performs dependency injection for a single package,
-// returning the gofmt'd Go source code.
-func Generate(bctx *build.Context, wd string, pkg string) ([]byte, []error) {
-	prog, errs := load(bctx, wd, []string{pkg})
+// returning the gofmt'd Go source code. The package pattern is defined
+// by the underlying build system. For the go tool, this is described at
+// https://golang.org/cmd/go/#hdr-Package_lists_and_patterns
+//
+// wd is the working directory and env is the set of environment
+// variables to use when loading the package specified by pkgPattern. If
+// env is nil or empty, it is interpreted as an empty set of variables.
+// In case of duplicate environment variables, the last one in the list
+// takes precedence.
+func Generate(ctx context.Context, wd string, env []string, pkgPattern string) (GeneratedFile, []error) {
+	prog, errs := load(ctx, wd, env, []string{pkgPattern})
 	if len(errs) > 0 {
-		return nil, errs
+		return GeneratedFile{}, errs
 	}
 	if len(prog.InitialPackages()) != 1 {
 		// This is more of a violated precondition than anything else.
-		return nil, []error{fmt.Errorf("load: got %d packages", len(prog.InitialPackages()))}
+		return GeneratedFile{}, []error{fmt.Errorf("load: got %d packages", len(prog.InitialPackages()))}
 	}
 	pkgInfo := prog.InitialPackages()[0]
+	outDir, err := detectOutputDir(prog.Fset, pkgInfo.Files)
+	if err != nil {
+		return GeneratedFile{}, []error{fmt.Errorf("load: %v", err)}
+	}
+	outFname := filepath.Join(outDir, "wire_gen.go")
 	g := newGen(prog, pkgInfo.Pkg.Path())
 	injectorFiles, errs := generateInjectors(g, pkgInfo)
 	if len(errs) > 0 {
-		return nil, errs
+		return GeneratedFile{}, errs
 	}
 	copyNonInjectorDecls(g, injectorFiles, &pkgInfo.Info)
 	goSrc := g.frame()
@@ -59,9 +89,22 @@ func Generate(bctx *build.Context, wd string, pkg string) ([]byte, []error) {
 	if err != nil {
 		// This is likely a bug from a poorly generated source file.
 		// Return an error and the unformatted source.
-		return goSrc, []error{err}
+		return GeneratedFile{Path: outFname, Content: goSrc}, []error{err}
 	}
-	return fmtSrc, nil
+	return GeneratedFile{Path: outFname, Content: fmtSrc}, nil
+}
+
+func detectOutputDir(fset *token.FileSet, files []*ast.File) (string, error) {
+	if len(files) == 0 {
+		return "", errors.New("no files to derive output directory from")
+	}
+	dir := filepath.Dir(fset.File(files[0].Package).Name())
+	for _, f := range files[1:] {
+		if dir2 := filepath.Dir(fset.File(f.Package).Name()); dir2 != dir {
+			return "", fmt.Errorf("found conflicting directories %q and %q", dir, dir2)
+		}
+	}
+	return dir, nil
 }
 
 // generateInjectors generates the injectors for a given package.

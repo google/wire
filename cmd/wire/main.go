@@ -18,14 +18,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"go/build"
 	"go/token"
 	"go/types"
-	"io/ioutil"
 	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
@@ -74,25 +72,17 @@ func generate(pkg string) error {
 	if err != nil {
 		return err
 	}
-	pkgInfo, err := build.Default.Import(pkg, wd, build.FindOnly)
-	if err != nil {
-		return err
-	}
-	out, errs := wire.Generate(&build.Default, wd, pkg)
+	out, errs := wire.Generate(context.Background(), wd, os.Environ(), pkg)
 	if len(errs) > 0 {
 		logErrors(errs)
 		return errors.New("generate failed")
 	}
-	if len(out) == 0 {
+	if len(out.Content) == 0 {
 		// No Wire directives, don't write anything.
 		fmt.Fprintln(os.Stderr, "wire: no injector found for", pkg)
 		return nil
 	}
-	p := filepath.Join(pkgInfo.Dir, "wire_gen.go")
-	if err := ioutil.WriteFile(p, out, 0666); err != nil {
-		return err
-	}
-	return nil
+	return out.Commit()
 }
 
 // show runs the show subcommand.
@@ -106,7 +96,7 @@ func show(pkgs ...string) error {
 	if err != nil {
 		return err
 	}
-	info, errs := wire.Load(&build.Default, wd, pkgs)
+	info, errs := wire.Load(context.Background(), wd, os.Environ(), pkgs)
 	if info != nil {
 		keys := make([]wire.ProviderSetID, 0, len(info.Sets))
 		for k := range info.Sets {
@@ -185,7 +175,7 @@ func check(pkgs ...string) error {
 	if err != nil {
 		return err
 	}
-	_, errs := wire.Load(&build.Default, wd, pkgs)
+	_, errs := wire.Load(context.Background(), wd, os.Environ(), pkgs)
 	if len(errs) > 0 {
 		logErrors(errs)
 		return errors.New("error loading packages")
