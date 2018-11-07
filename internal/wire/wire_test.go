@@ -488,12 +488,16 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 		if err != nil {
 			return err
 		}
-		if !info.Mode().IsRegular() || filepath.Ext(src) != ".go" {
-			return nil
-		}
 		rel, err := filepath.Rel(root, src)
 		if err != nil {
 			return err // unlikely
+		}
+		if info.Mode().IsDir() && rel == "want" {
+			// The "want" directory should not be included in goFiles.
+			return filepath.SkipDir
+		}
+		if !info.Mode().IsRegular() || filepath.Ext(src) != ".go" {
+			return nil
 		}
 		data, err := ioutil.ReadFile(src)
 		if err != nil {
