@@ -35,7 +35,7 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/tools/go/ast/astutil"
-	"golang.org/x/tools/go/loader"
+	"golang.org/x/tools/go/packages"
 )
 
 // GeneratedFile stores the content of a call to Generate and the
@@ -64,26 +64,25 @@ func (gen GeneratedFile) Commit() error {
 // In case of duplicate environment variables, the last one in the list
 // takes precedence.
 func Generate(ctx context.Context, wd string, env []string, pkgPattern string) (GeneratedFile, []error) {
-	prog, errs := load(ctx, wd, env, []string{pkgPattern})
+	pkgs, errs := load(ctx, wd, env, []string{pkgPattern})
 	if len(errs) > 0 {
 		return GeneratedFile{}, errs
 	}
-	if len(prog.InitialPackages()) != 1 {
+	if len(pkgs) != 1 {
 		// This is more of a violated precondition than anything else.
-		return GeneratedFile{}, []error{fmt.Errorf("load: got %d packages", len(prog.InitialPackages()))}
+		return GeneratedFile{}, []error{fmt.Errorf("load: got %d packages", len(pkgs))}
 	}
-	pkgInfo := prog.InitialPackages()[0]
-	outDir, err := detectOutputDir(prog.Fset, pkgInfo.Files)
+	outDir, err := detectOutputDir(pkgs[0].GoFiles)
 	if err != nil {
 		return GeneratedFile{}, []error{fmt.Errorf("load: %v", err)}
 	}
 	outFname := filepath.Join(outDir, "wire_gen.go")
-	g := newGen(prog, pkgInfo.Pkg.Path())
-	injectorFiles, errs := generateInjectors(g, pkgInfo)
+	g := newGen(pkgs[0])
+	injectorFiles, errs := generateInjectors(g, pkgs[0])
 	if len(errs) > 0 {
 		return GeneratedFile{}, errs
 	}
-	copyNonInjectorDecls(g, injectorFiles, &pkgInfo.Info)
+	copyNonInjectorDecls(g, injectorFiles, pkgs[0].TypesInfo)
 	goSrc := g.frame()
 	fmtSrc, err := format.Source(goSrc)
 	if err != nil {
@@ -94,13 +93,13 @@ func Generate(ctx context.Context, wd string, env []string, pkgPattern string) (
 	return GeneratedFile{Path: outFname, Content: fmtSrc}, nil
 }
 
-func detectOutputDir(fset *token.FileSet, files []*ast.File) (string, error) {
-	if len(files) == 0 {
+func detectOutputDir(paths []string) (string, error) {
+	if len(paths) == 0 {
 		return "", errors.New("no files to derive output directory from")
 	}
-	dir := filepath.Dir(fset.File(files[0].Package).Name())
-	for _, f := range files[1:] {
-		if dir2 := filepath.Dir(fset.File(f.Package).Name()); dir2 != dir {
+	dir := filepath.Dir(paths[0])
+	for _, p := range paths[1:] {
+		if dir2 := filepath.Dir(p); dir2 != dir {
 			return "", fmt.Errorf("found conflicting directories %q and %q", dir, dir2)
 		}
 	}
@@ -108,17 +107,17 @@ func detectOutputDir(fset *token.FileSet, files []*ast.File) (string, error) {
 }
 
 // generateInjectors generates the injectors for a given package.
-func generateInjectors(g *gen, pkgInfo *loader.PackageInfo) (injectorFiles []*ast.File, _ []error) {
-	oc := newObjectCache(g.prog)
-	injectorFiles = make([]*ast.File, 0, len(pkgInfo.Files))
+func generateInjectors(g *gen, pkg *packages.Package) (injectorFiles []*ast.File, _ []error) {
+	oc := newObjectCache([]*packages.Package{pkg})
+	injectorFiles = make([]*ast.File, 0, len(pkg.Syntax))
 	ec := new(errorCollector)
-	for _, f := range pkgInfo.Files {
+	for _, f := range pkg.Syntax {
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok {
 				continue
 			}
-			buildCall, err := findInjectorBuild(&pkgInfo.Info, fn)
+			buildCall, err := findInjectorBuild(pkg.TypesInfo, fn)
 			if err != nil {
 				ec.add(err)
 				continue
@@ -129,16 +128,16 @@ func generateInjectors(g *gen, pkgInfo *loader.PackageInfo) (injectorFiles []*as
 			if len(injectorFiles) == 0 || injectorFiles[len(injectorFiles)-1] != f {
 				// This is the first injector generated for this file.
 				// Write a file header.
-				name := filepath.Base(g.prog.Fset.File(f.Pos()).Name())
+				name := filepath.Base(g.pkg.Fset.File(f.Pos()).Name())
 				g.p("// Injectors from %s:\n\n", name)
 				injectorFiles = append(injectorFiles, f)
 			}
-			set, errs := oc.processNewSet(pkgInfo, buildCall, "")
+			set, errs := oc.processNewSet(pkg.TypesInfo, pkg.PkgPath, buildCall, "")
 			if len(errs) > 0 {
-				ec.add(notePositionAll(g.prog.Fset.Position(fn.Pos()), errs)...)
+				ec.add(notePositionAll(g.pkg.Fset.Position(fn.Pos()), errs)...)
 				continue
 			}
-			sig := pkgInfo.ObjectOf(fn.Name).Type().(*types.Signature)
+			sig := pkg.TypesInfo.ObjectOf(fn.Name).Type().(*types.Signature)
 			if errs := g.inject(fn.Pos(), fn.Name.Name, sig, set); len(errs) > 0 {
 				ec.add(errs...)
 				continue
@@ -155,7 +154,7 @@ func generateInjectors(g *gen, pkgInfo *loader.PackageInfo) (injectorFiles []*as
 // given files into the generated output.
 func copyNonInjectorDecls(g *gen, files []*ast.File, info *types.Info) {
 	for _, f := range files {
-		name := filepath.Base(g.prog.Fset.File(f.Pos()).Name())
+		name := filepath.Base(g.pkg.Fset.File(f.Pos()).Name())
 		first := true
 		for _, decl := range f.Decls {
 			switch decl := decl.(type) {
@@ -185,26 +184,26 @@ func copyNonInjectorDecls(g *gen, files []*ast.File, info *types.Info) {
 
 // importInfo holds info about an import.
 type importInfo struct {
+	// name is the identifier that is used in the generated source.
 	name string
-	// fullpath is the full, possibly vendored, path.
-	fullpath string
+	// differs is true if the import is given an identifier that does not
+	// match the package's identifier.
+	differs bool
 }
 
 // gen is the file-wide generator state.
 type gen struct {
-	currPackage string
-	buf         bytes.Buffer
-	imports     map[string]*importInfo
-	values      map[ast.Expr]string
-	prog        *loader.Program // for positions and determining package names
+	pkg     *packages.Package
+	buf     bytes.Buffer
+	imports map[string]importInfo
+	values  map[ast.Expr]string
 }
 
-func newGen(prog *loader.Program, pkg string) *gen {
+func newGen(pkg *packages.Package) *gen {
 	return &gen{
-		currPackage: pkg,
-		imports:     make(map[string]*importInfo),
-		values:      make(map[ast.Expr]string),
-		prog:        prog,
+		pkg:     pkg,
+		imports: make(map[string]importInfo),
+		values:  make(map[ast.Expr]string),
 	}
 }
 
@@ -218,7 +217,7 @@ func (g *gen) frame() []byte {
 	buf.WriteString("//go:generate wire\n")
 	buf.WriteString("//+build !wireinject\n\n")
 	buf.WriteString("package ")
-	buf.WriteString(g.prog.Package(g.currPackage).Pkg.Name())
+	buf.WriteString(g.pkg.Name)
 	buf.WriteString("\n\n")
 	if len(g.imports) > 0 {
 		buf.WriteString("import (\n")
@@ -230,10 +229,10 @@ func (g *gen) frame() []byte {
 		for _, path := range imps {
 			// Omit the local package identifier if it matches the package name.
 			info := g.imports[path]
-			if g.prog.Package(info.fullpath).Pkg.Name() == info.name {
-				fmt.Fprintf(&buf, "\t%q\n", path)
-			} else {
+			if info.differs {
 				fmt.Fprintf(&buf, "\t%s %q\n", info.name, path)
+			} else {
+				fmt.Fprintf(&buf, "\t%q\n", path)
 			}
 		}
 		buf.WriteString(")\n\n")
@@ -246,7 +245,7 @@ func (g *gen) frame() []byte {
 func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *ProviderSet) []error {
 	injectSig, err := funcOutput(sig)
 	if err != nil {
-		return []error{notePosition(g.prog.Fset.Position(pos),
+		return []error{notePosition(g.pkg.Fset.Position(pos),
 			fmt.Errorf("inject %s: %v", name, err))}
 	}
 	params := sig.Params()
@@ -254,13 +253,13 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 	for i := 0; i < params.Len(); i++ {
 		given[i] = params.At(i).Type()
 	}
-	calls, errs := solve(g.prog.Fset, injectSig.out, given, set)
+	calls, errs := solve(g.pkg.Fset, injectSig.out, given, set)
 	if len(errs) > 0 {
 		return mapErrors(errs, func(e error) error {
 			if w, ok := e.(*wireErr); ok {
 				return notePosition(w.position, fmt.Errorf("inject %s: %v", name, w.error))
 			}
-			return notePosition(g.prog.Fset.Position(pos), fmt.Errorf("inject %s: %v", name, e))
+			return notePosition(g.pkg.Fset.Position(pos), fmt.Errorf("inject %s: %v", name, e))
 		})
 	}
 	type pendingVar struct {
@@ -275,21 +274,21 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 		if c.hasCleanup && !injectSig.cleanup {
 			ts := types.TypeString(c.out, nil)
 			ec.add(notePosition(
-				g.prog.Fset.Position(pos),
+				g.pkg.Fset.Position(pos),
 				fmt.Errorf("inject %s: provider for %s returns cleanup but injection does not return cleanup function", name, ts)))
 		}
 		if c.hasErr && !injectSig.err {
 			ts := types.TypeString(c.out, nil)
 			ec.add(notePosition(
-				g.prog.Fset.Position(pos),
+				g.pkg.Fset.Position(pos),
 				fmt.Errorf("inject %s: provider for %s returns error but injection not allowed to fail", name, ts)))
 		}
 		if c.kind == valueExpr {
-			if err := accessibleFrom(c.valueTypeInfo, c.valueExpr, g.currPackage); err != nil {
+			if err := accessibleFrom(c.valueTypeInfo, c.valueExpr, g.pkg.PkgPath); err != nil {
 				// TODO(light): Display line number of value expression.
 				ts := types.TypeString(c.out, nil)
 				ec.add(notePosition(
-					g.prog.Fset.Position(pos),
+					g.pkg.Fset.Position(pos),
 					fmt.Errorf("inject %s: value %s can't be used: %v", name, ts, err)))
 			}
 			if g.values[c.valueExpr] == "" {
@@ -347,9 +346,9 @@ func (g *gen) rewritePkgRefs(info *types.Info, node ast.Node) ast.Node {
 			if obj == nil {
 				return false
 			}
-			if pkg := obj.Pkg(); pkg != nil && obj.Parent() == pkg.Scope() && pkg.Path() != g.currPackage {
+			if pkg := obj.Pkg(); pkg != nil && obj.Parent() == pkg.Scope() && pkg.Path() != g.pkg.PkgPath {
 				// An identifier from either a dot import or read from a different package.
-				newPkgID := g.qualifyImport(pkg.Path())
+				newPkgID := g.qualifyImport(pkg.Name(), pkg.Path())
 				c.Replace(&ast.SelectorExpr{
 					X:   ast.NewIdent(newPkgID),
 					Sel: ast.NewIdent(node.Name),
@@ -367,7 +366,8 @@ func (g *gen) rewritePkgRefs(info *types.Info, node ast.Node) ast.Node {
 				return true
 			}
 			// This is a qualified identifier. Rewrite and avoid visiting subexpressions.
-			newPkgID := g.qualifyImport(pkgName.Imported().Path())
+			imported := pkgName.Imported()
+			newPkgID := g.qualifyImport(imported.Name(), imported.Path())
 			c.Replace(&ast.SelectorExpr{
 				X:   ast.NewIdent(newPkgID),
 				Sel: ast.NewIdent(node.Sel.Name),
@@ -389,7 +389,7 @@ func (g *gen) rewritePkgRefs(info *types.Info, node ast.Node) ast.Node {
 		return false
 	}
 	var scopeStack []*types.Scope
-	pkgScope := g.prog.Package(g.currPackage).Pkg.Scope()
+	pkgScope := g.pkg.Types.Scope()
 	node = astutil.Apply(node, func(c *astutil.Cursor) bool {
 		if scope := info.Scopes[c.Node()]; scope != nil {
 			scopeStack = append(scopeStack, scope)
@@ -451,21 +451,21 @@ func (g *gen) rewritePkgRefs(info *types.Info, node ast.Node) ast.Node {
 // package references it encounters.
 func (g *gen) writeAST(info *types.Info, node ast.Node) {
 	node = g.rewritePkgRefs(info, node)
-	if err := printer.Fprint(&g.buf, g.prog.Fset, node); err != nil {
+	if err := printer.Fprint(&g.buf, g.pkg.Fset, node); err != nil {
 		panic(err)
 	}
 }
 
-func (g *gen) qualifiedID(path, sym string) string {
-	name := g.qualifyImport(path)
+func (g *gen) qualifiedID(pkgName, pkgPath, sym string) string {
+	name := g.qualifyImport(pkgName, pkgPath)
 	if name == "" {
 		return sym
 	}
 	return name + "." + sym
 }
 
-func (g *gen) qualifyImport(path string) string {
-	if path == g.currPackage {
+func (g *gen) qualifyImport(name, path string) string {
+	if path == g.pkg.PkgPath {
 		return ""
 	}
 	// TODO(light): This is depending on details of the current loader.
@@ -474,16 +474,19 @@ func (g *gen) qualifyImport(path string) string {
 	if i := strings.LastIndex(path, vendorPart); i != -1 && (i == 0 || path[i-1] == '/') {
 		unvendored = path[i+len(vendorPart):]
 	}
-	if info := g.imports[unvendored]; info != nil {
+	if info, ok := g.imports[unvendored]; ok {
 		return info.name
 	}
 	// TODO(light): Use parts of import path to disambiguate.
-	name := disambiguate(g.prog.Package(path).Pkg.Name(), func(n string) bool {
+	newName := disambiguate(name, func(n string) bool {
 		// Don't let an import take the "err" name. That's annoying.
 		return n == "err" || g.nameInFileScope(n)
 	})
-	g.imports[unvendored] = &importInfo{name: name, fullpath: path}
-	return name
+	g.imports[unvendored] = importInfo{
+		name:    newName,
+		differs: newName != name,
+	}
+	return newName
 }
 
 func (g *gen) nameInFileScope(name string) bool {
@@ -497,12 +500,12 @@ func (g *gen) nameInFileScope(name string) bool {
 			return true
 		}
 	}
-	_, obj := g.prog.Package(g.currPackage).Pkg.Scope().LookupParent(name, token.NoPos)
+	_, obj := g.pkg.Types.Scope().LookupParent(name, token.NoPos)
 	return obj != nil
 }
 
 func (g *gen) qualifyPkg(pkg *types.Package) string {
-	return g.qualifyImport(pkg.Path())
+	return g.qualifyImport(pkg.Name(), pkg.Path())
 }
 
 func (g *gen) p(format string, args ...interface{}) {
@@ -601,7 +604,7 @@ func (ig *injectorGen) funcProviderCall(lname string, c *call, injectSig outputS
 		ig.p(", %s", ig.errVar)
 	}
 	ig.p(" := ")
-	ig.p("%s(", ig.g.qualifiedID(c.importPath, c.name))
+	ig.p("%s(", ig.g.qualifiedID(c.pkg.Name(), c.pkg.Path(), c.name))
 	for i, a := range c.args {
 		if i > 0 {
 			ig.p(", ")
@@ -634,7 +637,7 @@ func (ig *injectorGen) structProviderCall(lname string, c *call) {
 	if _, ok := c.out.(*types.Pointer); ok {
 		ig.p("&")
 	}
-	ig.p("%s{\n", ig.g.qualifiedID(c.importPath, c.name))
+	ig.p("%s{\n", ig.g.qualifiedID(c.pkg.Name(), c.pkg.Path(), c.name))
 	for i, a := range c.args {
 		ig.p("\t\t%s: ", c.fieldNames[i])
 		if a < len(ig.paramNames) {
@@ -687,7 +690,7 @@ func (ig *injectorGen) writeAST(info *types.Info, node ast.Node) {
 	if ig.discard {
 		return
 	}
-	if err := printer.Fprint(&ig.g.buf, ig.g.prog.Fset, node); err != nil {
+	if err := printer.Fprint(&ig.g.buf, ig.g.pkg.Fset, node); err != nil {
 		panic(err)
 	}
 }

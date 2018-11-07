@@ -44,11 +44,11 @@ type call struct {
 	// out is the type this step produces.
 	out types.Type
 
-	// importPath and name identify the provider to call for kind ==
+	// pkg and name identify the provider to call for kind ==
 	// funcProviderCall or the type to construct for kind ==
 	// structProvider.
-	importPath string
-	name       string
+	pkg  *types.Package
+	name string
 
 	// args is a list of arguments to call the provider with.  Each element is:
 	// a) one of the givens (args[i] < len(given)), or
@@ -199,7 +199,7 @@ dfs:
 			}
 			calls = append(calls, call{
 				kind:       kind,
-				importPath: p.ImportPath,
+				pkg:        p.Pkg,
 				name:       p.Name,
 				args:       args,
 				fieldNames: p.Fields,
@@ -419,7 +419,7 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 						fmt.Fprintf(sb, "cycle for %s:\n", types.TypeString(a, nil))
 						for j := i; j < len(curr); j++ {
 							p := providerMap.At(curr[j]).(*ProvidedType).Provider()
-							fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.ImportPath, p.Name)
+							fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Pkg.Path(), p.Name)
 						}
 						fmt.Fprintf(sb, "%s\n", types.TypeString(a, nil))
 						ec.add(errors.New(sb.String()))

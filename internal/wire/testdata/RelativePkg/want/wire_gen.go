@@ -8,10 +8,6 @@ package main
 // Injectors from wire.go:
 
 func injectedMessage() string {
-	string2 := _wireStringValue
+	string2 := provideMessage()
 	return string2
 }
-
-var (
-	_wireStringValue = "Hello, World!"
-)

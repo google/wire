@@ -78,6 +78,10 @@ func TestWire(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer os.RemoveAll(gopath)
+			gopath, err = filepath.EvalSymlinks(gopath)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if err := test.materialize(gopath); err != nil {
 				t.Fatal(err)
 			}
@@ -150,18 +154,9 @@ func TestWire(t *testing.T) {
 }
 
 func goBuildCheck(goToolPath, gopath string, test *testCase) error {
-	// Write go.mod files for example.com and the wire package.
-	// TODO(#78): Move this to happen in materialize() once modules work.
-	if err := writeGoMod(gopath); err != nil {
-		return err
-	}
-
 	// Run `go build`.
 	testExePath := filepath.Join(gopath, "bin", "testprog")
 	buildCmd := []string{"build", "-o", testExePath}
-	if test.name == "Vendor" && os.Getenv("GO111MODULE") == "on" {
-		buildCmd = append(buildCmd, "-mod=vendor")
-	}
 	buildCmd = append(buildCmd, test.pkg)
 	cmd := exec.Command(goToolPath, buildCmd...)
 	cmd.Dir = filepath.Join(gopath, "src", "example.com")
@@ -532,28 +527,8 @@ func (test *testCase) materialize(gopath string) error {
 			return fmt.Errorf("materialize GOPATH: %v", err)
 		}
 	}
-	return nil
-}
 
-// writeGoMod generates go.mod files for the test package and its dependency.
-// The file structure looks like:
-//
-//	gopath/src/
-//
-//		example.com/
-//
-//			go.mod
-//				replaces dependency with local copied one
-//
-//			... (Packages to be built and tested)
-//				any Go files copied recursively
-//
-//		github.com/google/go-cloud/
-//
-//			go.mod
-//
-//			... (Dependency files copied)
-func writeGoMod(gopath string) error {
+	// Add go.mod files to example.com and github.com/google/go-cloud.
 	const importPath = "example.com"
 	const depPath = "github.com/google/go-cloud"
 	depLoc := filepath.Join(gopath, "src", filepath.FromSlash(depPath))
@@ -562,7 +537,7 @@ func writeGoMod(gopath string) error {
 	if err := ioutil.WriteFile(gomod, []byte(example), 0666); err != nil {
 		return fmt.Errorf("generate go.mod for %s: %v", gomod, err)
 	}
-	if err := ioutil.WriteFile(filepath.Join(depLoc, "go.mod"), []byte("module "+depPath), 0666); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(depLoc, "go.mod"), []byte("module "+depPath+"\n"), 0666); err != nil {
 		return fmt.Errorf("generate go.mod for %s: %v", depPath, err)
 	}
 	return nil

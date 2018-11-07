@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build wireinject
+package main
 
-package bar
+import "fmt"
 
-import "github.com/google/go-cloud/wire"
+func main() {
+	fmt.Println(injectedMessage())
+}
 
-// Set provides an unfriendly user greeting.
-var Set = wire.NewSet(wire.Value("Bah humbug! This is the wrong variant!"))
+// provideMessage provides a friendly user greeting.
+func provideMessage() string {
+	return "Hello, World!"
+}

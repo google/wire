@@ -15,4 +15,7 @@ func injectInterface() Interface {
 
 // wire.go:
 
+// Wire tries to disambiguate the variable "select" by prepending
+// the package name; this package-scoped variable conflicts with that
+// and forces a different name.
 var mainSelect = 0
