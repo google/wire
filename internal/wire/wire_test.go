@@ -1,4 +1,4 @@
-// Copyright 2018 The Go Cloud Authors
+// Copyright 2018 The Wire Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package wire
 import (
 	"bytes"
 	"context"
+	"flag"
 	"fmt"
 	"go/build"
 	"go/types"
@@ -29,9 +30,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/google/go-cloud/internal/testing/setup"
 	"github.com/google/go-cmp/cmp"
 )
+
+var record = flag.Bool("record", false, "whether to run tests against cloud resources and record the interactions")
 
 func TestWire(t *testing.T) {
 	const testRoot = "testdata"
@@ -60,7 +62,7 @@ func TestWire(t *testing.T) {
 	}
 
 	var goToolPath string
-	if *setup.Record {
+	if *record {
 		goToolPath = filepath.Join(build.Default.GOROOT, "bin", "go")
 		if _, err := os.Stat(goToolPath); err != nil {
 			t.Fatal("go toolchain not available:", err)
@@ -99,7 +101,7 @@ func TestWire(t *testing.T) {
 				if !test.wantWireError {
 					t.Fatal("Did not expect errors. To -record an error, create want/wire_errs.txt.")
 				}
-				if *setup.Record {
+				if *record {
 					wireErrsFile := filepath.Join(testRoot, test.name, "want", "wire_errs.txt")
 					if err := ioutil.WriteFile(wireErrsFile, []byte(strings.Join(gotErrStrings, "\n\n")), 0666); err != nil {
 						t.Fatalf("failed to write wire_errs.txt file: %v", err)
@@ -120,7 +122,7 @@ func TestWire(t *testing.T) {
 				t.Errorf("suggested output path = %q; want to start with %q", gen.Path, prefix)
 			}
 
-			if *setup.Record {
+			if *record {
 				// Record ==> Build the generated Wire code,
 				// check that the program's output matches the
 				// expected output, save wire output on
@@ -465,7 +467,7 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 	if wantWireError {
 		wantWireErrorStrings = strings.Split(string(wireErrb), "\n\n")
 	} else {
-		if !*setup.Record {
+		if !*record {
 			wantWireOutput, err = ioutil.ReadFile(filepath.Join(root, "want", "wire_gen.go"))
 			if err != nil {
 				return nil, fmt.Errorf("load test case %s: %v, if this is a new testcase, run with -record to generate the wire_gen.go file", name, err)
@@ -477,7 +479,7 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 		}
 	}
 	goFiles := map[string][]byte{
-		"github.com/google/go-cloud/wire/wire.go": wireGoSrc,
+		"github.com/google/wire/wire.go": wireGoSrc,
 	}
 	err = filepath.Walk(root, func(src string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -528,11 +530,11 @@ func (test *testCase) materialize(gopath string) error {
 		}
 	}
 
-	// Add go.mod files to example.com and github.com/google/go-cloud.
+	// Add go.mod files to example.com and github.com/google/wire.
 	const importPath = "example.com"
-	const depPath = "github.com/google/go-cloud"
+	const depPath = "github.com/google/wire"
 	depLoc := filepath.Join(gopath, "src", filepath.FromSlash(depPath))
-	example := fmt.Sprintf("module %s\n\nreplace %s => %s\n", importPath, depPath, depLoc)
+	example := fmt.Sprintf("module %s\n\nrequire %s v0.1.0\nreplace %s => %s\n", importPath, depPath, depPath, depLoc)
 	gomod := filepath.Join(gopath, "src", filepath.FromSlash(importPath), "go.mod")
 	if err := ioutil.WriteFile(gomod, []byte(example), 0666); err != nil {
 		return fmt.Errorf("generate go.mod for %s: %v", gomod, err)

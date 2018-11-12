@@ -1,4 +1,4 @@
-// Copyright 2018 The Go Cloud Authors
+// Copyright 2018 The Wire Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 // Wire is a compile-time dependency injection tool.
 //
-// For an overview, see https://github.com/google/go-cloud/blob/master/wire/README.md
+// For an overview, see https://github.com/google/wire/blob/master/README.md
 package main
 
 import (
@@ -29,7 +29,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/go-cloud/wire/internal/wire"
+	"github.com/google/wire/internal/wire"
 	"golang.org/x/tools/go/types/typeutil"
 )
 

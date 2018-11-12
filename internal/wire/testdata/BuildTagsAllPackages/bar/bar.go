@@ -1,4 +1,4 @@
-// Copyright 2018 The Go Cloud Authors
+// Copyright 2018 The Wire Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 // Package bar includes both wireinject and non-wireinject variants.
 package bar
 
-import "github.com/google/go-cloud/wire"
+import "github.com/google/wire"
 
 // Set provides an unfriendly user greeting.
 var Set = wire.NewSet(wire.Value("Bah humbug! This is the wrong variant!"))

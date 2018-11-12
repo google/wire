@@ -17,7 +17,7 @@ For an overview, see the [introductory blog post][].
 Install Wire by running:
 
 ```shell
-go get github.com/google/go-cloud/wire/cmd/wire
+go get github.com/google/wire/cmd/wire
 ```
 
 and ensuring that `$GOPATH/bin` is added to your `$PATH`.
@@ -98,7 +98,7 @@ package foobarbaz
 
 import (
     // ...
-    "github.com/google/go-cloud/wire"
+    "github.com/google/wire"
 )
 
 // ...
@@ -143,7 +143,7 @@ package main
 import (
     "context"
 
-    "github.com/google/go-cloud/wire"
+    "github.com/google/wire"
     "example.com/foobarbaz"
 )
 
@@ -484,7 +484,7 @@ You may not:
 
 There are two approaches for creating an injected app with mocked dependencies.
 Examples of both approaches are shown
-[here](https://github.com/google/go-cloud/tree/master/wire/internal/wire/testdata/ExampleWithMocks/foo).
+[here](https://github.com/google/wire/tree/master/internal/wire/testdata/ExampleWithMocks/foo).
 
 #### Approach A: Pass mocks to the injector
 

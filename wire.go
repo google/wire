@@ -1,4 +1,4 @@
-// Copyright 2018 The Go Cloud Authors
+// Copyright 2018 The Wire Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 // Package wire contains directives for Wire code generation.
 // For an overview of working with Wire, see the user guide at
-// https://github.com/google/go-cloud/blob/master/wire/README.md
+// https://github.com/google/wire/blob/master/README.md
 //
 // The directives in this package are used as input to the Wire code generation
 // tool. The entry point of Wire's analysis are injector functions: function
