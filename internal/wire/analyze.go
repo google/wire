@@ -421,7 +421,7 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 							p := providerMap.At(curr[j]).(*ProvidedType).Provider()
 							fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Pkg.Path(), p.Name)
 						}
-						fmt.Fprintf(sb, "%s\n", types.TypeString(a, nil))
+						fmt.Fprintf(sb, "%s", types.TypeString(a, nil))
 						ec.add(errors.New(sb.String()))
 						hasCycle = true
 						break
