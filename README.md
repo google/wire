@@ -424,7 +424,7 @@ func NewGreeter(ctx context.Context, opts *Options) (*Greeter, error) {
 var GreeterSet = wire.NewSet(Options{}, NewGreeter)
 ```
 
-### Evolving Provider Sets
+### Provider Sets in Libraries
 
 When creating a provider set for use in a library, the only changes you can make
 without breaking compatibility are:
@@ -479,6 +479,17 @@ You may not:
     `*Greeter` will be broken.
 -   Add a provider for `io.Writer` to `GreeterSet`. Injectors might already have
     a provider for `io.Writer` which might conflict with this one.
+
+As such, you should pick the output types in a library provider set carefully.
+In general, prefer small provider sets in a library. For example, it is common
+for a library provider set to contain a single provider function along with a
+`wire.Bind` to the interface the return type implements. Avoiding larger
+provider sets reduces the likelihood that applications will encounter conflicts.
+To illustrate, imagine your library provides a client for a web service. While
+it may be tempting to bundle a provider for `*http.Client` in a provider set for
+your library's client, doing so would cause conflicts if every library did the
+same. Instead, the library's provider set should only include the provider for
+the API client, and let `*http.Client` be an input of the provider set.
 
 ### Mocking
 
@@ -599,6 +610,25 @@ func inject() *Bar {
 	return nil
 }
 ```
+
+### Why does Wire forbid including the same provider multiple times?
+
+Wire forbids this to remain consistent with the principle that specifying
+multiple providers for the same type is an error. On the surface, Wire could
+permit duplication, but this would introduce a few unintended consequences:
+
+-  Wire would have to specify what kinds of duplicates are permissible: are two
+   `wire.Value` calls ever considered to be the "same"?
+-  If a provider set changes the function it uses to provide a type, then this
+   could break an application, since it may introduce a new conflict between
+   another provider set that was specifying the "same" provider.
+
+As such, we decided that the simpler behavior would be for this case to be an
+error, knowing we can always relax this restriction later. The user can always
+create a new provider set that does not have the conflicting type. A [proposed
+subtract command][] would automate the toil in this process.
+
+[proposed subtract command]: https://github.com/google/go-cloud/issues/51
 
 ### Should I use Wire for small applications?
 
