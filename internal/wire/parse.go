@@ -32,10 +32,11 @@ import (
 // A providerSetSrc captures the source for a type provided by a ProviderSet.
 // Exactly one of the fields will be set.
 type providerSetSrc struct {
-	Provider *Provider
-	Binding  *IfaceBinding
-	Value    *Value
-	Import   *ProviderSet
+	Provider    *Provider
+	Binding     *IfaceBinding
+	Value       *Value
+	Import      *ProviderSet
+	InjectorArg *InjectorArg
 }
 
 // description returns a string describing the source of p, including line numbers.
@@ -59,6 +60,9 @@ func (p *providerSetSrc) description(fset *token.FileSet, typ types.Type) string
 		return fmt.Sprintf("wire.Value (%s)", fset.Position(p.Value.Pos))
 	case p.Import != nil:
 		return fmt.Sprintf("provider set %s(%s)", quoted(p.Import.VarName), fset.Position(p.Import.Pos))
+	case p.InjectorArg != nil:
+		args := p.InjectorArg.Args
+		return fmt.Sprintf("argument %s to injector function %s (%s)", args.Tuple.At(p.InjectorArg.Index).Name(), args.Name, fset.Position(args.Pos))
 	}
 	panic("providerSetSrc with no fields set")
 }
@@ -93,6 +97,8 @@ type ProviderSet struct {
 	Bindings  []*IfaceBinding
 	Values    []*Value
 	Imports   []*ProviderSet
+	// InjectorArgs is only filled in for wire.Build.
+	InjectorArgs *InjectorArgs
 
 	// providerMap maps from provided type to a *ProvidedType.
 	// It includes all of the imported types.
@@ -190,6 +196,24 @@ type Value struct {
 	info *types.Info
 }
 
+// InjectorArg describes a specific argument passed to an injector function.
+type InjectorArg struct {
+	// Args is the full set of arguments.
+	Args *InjectorArgs
+	// Index is the index into Args.Tuple for this argument.
+	Index int
+}
+
+// InjectorArgs describes the arguments passed to an injector function.
+type InjectorArgs struct {
+	// Name is the name of the injector function.
+	Name string
+	// Tuple represents the arguments.
+	Tuple *types.Tuple
+	// Pos is the source position of the injector function.
+	Pos token.Pos
+}
+
 // Load finds all the provider sets in the packages that match the given
 // patterns, as well as the provider sets' transitive dependencies. It
 // may return both errors and Info. The patterns are defined by the
@@ -252,11 +276,6 @@ func Load(ctx context.Context, wd string, env []string, patterns []string) (*Inf
 				if buildCall == nil {
 					continue
 				}
-				set, errs := oc.processNewSet(pkg.TypesInfo, pkg.PkgPath, buildCall, "")
-				if len(errs) > 0 {
-					ec.add(notePositionAll(fset.Position(fn.Pos()), errs)...)
-					continue
-				}
 				sig := pkg.TypesInfo.ObjectOf(fn.Name).Type().(*types.Signature)
 				ins, out, err := injectorFuncSignature(sig)
 				if err != nil {
@@ -265,6 +284,16 @@ func Load(ctx context.Context, wd string, env []string, patterns []string) (*Inf
 					} else {
 						ec.add(notePosition(fset.Position(fn.Pos()), fmt.Errorf("inject %s: %v", fn.Name.Name, err)))
 					}
+					continue
+				}
+				injectorArgs := &InjectorArgs{
+					Name:  fn.Name.Name,
+					Tuple: ins,
+					Pos:   fn.Pos(),
+				}
+				set, errs := oc.processNewSet(pkg.TypesInfo, pkg.PkgPath, buildCall, injectorArgs, "")
+				if len(errs) > 0 {
+					ec.add(notePositionAll(fset.Position(fn.Pos()), errs)...)
 					continue
 				}
 				_, errs = solve(fset, out.out, ins, set)
@@ -482,7 +511,7 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 		}
 		switch fnObj.Name() {
 		case "NewSet":
-			pset, errs := oc.processNewSet(info, pkgPath, call, varName)
+			pset, errs := oc.processNewSet(info, pkgPath, call, nil, varName)
 			return pset, notePositionAll(exprPos, errs)
 		case "Bind":
 			b, err := processBind(oc.fset, info, call)
@@ -516,13 +545,14 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 	return nil, []error{notePosition(exprPos, errors.New("unknown pattern"))}
 }
 
-func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast.CallExpr, varName string) (*ProviderSet, []error) {
+func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast.CallExpr, args *InjectorArgs, varName string) (*ProviderSet, []error) {
 	// Assumes that call.Fun is wire.NewSet or wire.Build.
 
 	pset := &ProviderSet{
-		Pos:     call.Pos(),
-		PkgPath: pkgPath,
-		VarName: varName,
+		Pos:          call.Pos(),
+		InjectorArgs: args,
+		PkgPath:      pkgPath,
+		VarName:      varName,
 	}
 	ec := new(errorCollector)
 	for _, arg := range call.Args {
@@ -626,17 +656,12 @@ func processFuncProvider(fset *token.FileSet, fn *types.Func) (*Provider, []erro
 	return provider, nil
 }
 
-func injectorFuncSignature(sig *types.Signature) ([]types.Type, outputSignature, error) {
+func injectorFuncSignature(sig *types.Signature) (*types.Tuple, outputSignature, error) {
 	out, err := funcOutput(sig)
 	if err != nil {
 		return nil, outputSignature{}, err
 	}
-	params := sig.Params()
-	given := make([]types.Type, params.Len())
-	for i := 0; i < params.Len(); i++ {
-		given[i] = params.At(i).Type()
-	}
-	return given, out, nil
+	return sig.Params(), out, nil
 }
 
 type outputSignature struct {
@@ -893,49 +918,66 @@ func isProviderSetType(t types.Type) bool {
 	return obj.Pkg() != nil && isWireImport(obj.Pkg().Path()) && obj.Name() == "ProviderSet"
 }
 
-// ProvidedType is a pointer to a Provider or a Value. The zero value is
-// a nil pointer. It also holds the concrete type that the Provider or Value
-// provided.
+// ProvidedType represents a type provided from a source. The source
+// can be a *Provider (a provider function), a *Value (wire.Value), or an
+// *InjectorArgs (arguments to the injector function). The zero value has
+// none of the above, and returns true for IsNil.
 type ProvidedType struct {
+	// t is the provided concrete type.
 	t types.Type
 	p *Provider
 	v *Value
+	a *InjectorArg
 }
 
-// IsNil reports whether pv is the zero value.
-func (pv ProvidedType) IsNil() bool {
-	return pv.p == nil && pv.v == nil
+// IsNil reports whether pt is the zero value.
+func (pt ProvidedType) IsNil() bool {
+	return pt.p == nil && pt.v == nil && pt.a == nil
 }
 
 // ConcreteType returns the concrete type that was provided.
-func (pv ProvidedType) ConcreteType() types.Type {
-	return pv.t
+func (pt ProvidedType) ConcreteType() types.Type {
+	return pt.t
 }
 
-// IsProvider reports whether pv points to a Provider.
-func (pv ProvidedType) IsProvider() bool {
-	return pv.p != nil
+// IsProvider reports whether pt points to a Provider.
+func (pt ProvidedType) IsProvider() bool {
+	return pt.p != nil
 }
 
-// IsValue reports whether pv points to a Value.
-func (pv ProvidedType) IsValue() bool {
-	return pv.v != nil
+// IsValue reports whether pt points to a Value.
+func (pt ProvidedType) IsValue() bool {
+	return pt.v != nil
 }
 
-// Provider returns pv as a Provider pointer. It panics if pv points to a
-// Value.
-func (pv ProvidedType) Provider() *Provider {
-	if pv.v != nil {
-		panic("Value pointer converted to a Provider")
+// IsArg reports whether pt points to an injector argument.
+func (pt ProvidedType) IsArg() bool {
+	return pt.a != nil
+}
+
+// Provider returns pt as a Provider pointer. It panics if pt does not point
+// to a Provider.
+func (pt ProvidedType) Provider() *Provider {
+	if pt.p == nil {
+		panic("ProvidedType does not hold a Provider")
 	}
-	return pv.p
+	return pt.p
 }
 
-// Value returns pv as a Value pointer. It panics if pv points to a
-// Provider.
-func (pv ProvidedType) Value() *Value {
-	if pv.p != nil {
-		panic("Provider pointer converted to a Value")
+// Value returns pt as a Value pointer. It panics if pt does not point
+// to a Value.
+func (pt ProvidedType) Value() *Value {
+	if pt.v == nil {
+		panic("ProvidedType does not hold a Value")
 	}
-	return pv.v
+	return pt.v
+}
+
+// Arg returns pt as an *InjectorArg representing an injector argument. It
+// panics if pt does not point to an arg.
+func (pt ProvidedType) Arg() *InjectorArg {
+	if pt.a == nil {
+		panic("ProvidedType does not hold an Arg")
+	}
+	return pt.a
 }

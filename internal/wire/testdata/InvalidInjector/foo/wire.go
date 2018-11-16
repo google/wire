@@ -22,7 +22,7 @@ import (
 
 func injectFoo() Foo {
 	// This non-call statement makes this an invalid injector.
-	 _ = 42
+	_ = 42
 	panic(wire.Build(provideFoo))
 }
 

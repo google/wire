@@ -1,1 +1,0 @@
-example.com/foo/wire.go:x:y: no binding for *example.com/foo.Foo

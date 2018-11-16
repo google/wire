@@ -1,1 +1,5 @@
-example.com/foo/wire.go:x:y: inject inject: multiple inputs of the same type string
+example.com/foo/wire.go:x:y: wire.Build has multiple bindings for string
+current:
+<- argument b to injector function inject (example.com/foo/wire.go:x:y)
+previous:
+<- argument a to injector function inject (example.com/foo/wire.go:x:y)

@@ -17,5 +17,3 @@ package bar
 var foo struct {
 	X int
 }
-
-

@@ -238,6 +238,9 @@ func gather(info *wire.Info, key wire.ProviderSetID) (_ []outGroup, imports map[
 			case pv.IsNil():
 				// This is an input.
 				inputVisited.Set(curr, -1)
+			case pv.IsArg():
+				// This is an injector argument.
+				inputVisited.Set(curr, -1)
 			case pv.IsProvider():
 				// Try to see if any args haven't been visited.
 				p := pv.Provider()

@@ -132,12 +132,26 @@ func generateInjectors(g *gen, pkg *packages.Package) (injectorFiles []*ast.File
 				g.p("// Injectors from %s:\n\n", name)
 				injectorFiles = append(injectorFiles, f)
 			}
-			set, errs := oc.processNewSet(pkg.TypesInfo, pkg.PkgPath, buildCall, "")
+			sig := pkg.TypesInfo.ObjectOf(fn.Name).Type().(*types.Signature)
+			ins, _, err := injectorFuncSignature(sig)
+			if err != nil {
+				if w, ok := err.(*wireErr); ok {
+					ec.add(notePosition(w.position, fmt.Errorf("inject %s: %v", fn.Name.Name, w.error)))
+				} else {
+					ec.add(notePosition(g.pkg.Fset.Position(fn.Pos()), fmt.Errorf("inject %s: %v", fn.Name.Name, err)))
+				}
+				continue
+			}
+			injectorArgs := &InjectorArgs{
+				Name:  fn.Name.Name,
+				Tuple: ins,
+				Pos:   fn.Pos(),
+			}
+			set, errs := oc.processNewSet(pkg.TypesInfo, pkg.PkgPath, buildCall, injectorArgs, "")
 			if len(errs) > 0 {
 				ec.add(notePositionAll(g.pkg.Fset.Position(fn.Pos()), errs)...)
 				continue
 			}
-			sig := pkg.TypesInfo.ObjectOf(fn.Name).Type().(*types.Signature)
 			if errs := g.inject(fn.Pos(), fn.Name.Name, sig, set); len(errs) > 0 {
 				ec.add(errs...)
 				continue
@@ -249,11 +263,7 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 			fmt.Errorf("inject %s: %v", name, err))}
 	}
 	params := sig.Params()
-	given := make([]types.Type, params.Len())
-	for i := 0; i < params.Len(); i++ {
-		given[i] = params.At(i).Type()
-	}
-	calls, errs := solve(g.pkg.Fset, injectSig.out, given, set)
+	calls, errs := solve(g.pkg.Fset, injectSig.out, params, set)
 	if len(errs) > 0 {
 		return mapErrors(errs, func(e error) error {
 			if w, ok := e.(*wireErr); ok {
