@@ -90,9 +90,19 @@ func TestWire(t *testing.T) {
 				t.Fatal(err)
 			}
 			wd := filepath.Join(gopath, "src", "example.com")
-			gen, errs := Generate(ctx, wd, append(os.Environ(), "GOPATH="+gopath), test.pkg)
-			if len(gen.Content) > 0 {
-				defer t.Logf("wire_gen.go:\n%s", gen.Content)
+			gens, errs := Generate(ctx, wd, append(os.Environ(), "GOPATH="+gopath), []string{test.pkg})
+			var gen GenerateResult
+			if len(gens) > 1 {
+				t.Fatalf("got %d generated files, want 0 or 1", len(gens))
+			}
+			if len(gens) == 1 {
+				gen = gens[0]
+				if len(gen.Errs) > 0 {
+					errs = append(errs, gen.Errs...)
+				}
+				if len(gen.Content) > 0 {
+					defer t.Logf("wire_gen.go:\n%s", gen.Content)
+				}
 			}
 			if len(errs) > 0 {
 				gotErrStrings := make([]string, len(errs))
@@ -119,9 +129,9 @@ func TestWire(t *testing.T) {
 				t.Fatal("wire succeeded; want error")
 			}
 			outPathSane := true
-			if prefix := gopath + string(os.PathSeparator) + "src" + string(os.PathSeparator); !strings.HasPrefix(gen.Path, prefix) {
+			if prefix := gopath + string(os.PathSeparator) + "src" + string(os.PathSeparator); !strings.HasPrefix(gen.OutputPath, prefix) {
 				outPathSane = false
-				t.Errorf("suggested output path = %q; want to start with %q", gen.Path, prefix)
+				t.Errorf("suggested output path = %q; want to start with %q", gen.OutputPath, prefix)
 			}
 
 			if *record {

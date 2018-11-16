@@ -41,8 +41,6 @@ func main() {
 	case len(os.Args) == 2 && (os.Args[1] == "help" || os.Args[1] == "-h" || os.Args[1] == "-help" || os.Args[1] == "--help"):
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(0)
-	case len(os.Args) == 1 || len(os.Args) == 2 && os.Args[1] == "gen":
-		err = generate(".")
 	case len(os.Args) == 2 && os.Args[1] == "show":
 		err = show(".")
 	case len(os.Args) > 2 && os.Args[1] == "show":
@@ -51,10 +49,15 @@ func main() {
 		err = check(".")
 	case len(os.Args) > 2 && os.Args[1] == "check":
 		err = check(os.Args[2:]...)
-	case len(os.Args) == 2:
-		err = generate(os.Args[1])
-	case len(os.Args) == 3 && os.Args[1] == "gen":
-		err = generate(os.Args[2])
+	case len(os.Args) == 2 && os.Args[1] == "gen":
+		err = generate(".")
+	case len(os.Args) > 2 && os.Args[1] == "gen":
+		err = generate(os.Args[2:]...)
+	// No explicit command given, assume "gen".
+	case len(os.Args) == 1:
+		err = generate(".")
+	case len(os.Args) > 1:
+		err = generate(os.Args[1:]...)
 	default:
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(64)
@@ -65,24 +68,44 @@ func main() {
 	}
 }
 
-// generate runs the gen subcommand. Given a package, gen will create
-// the wire_gen.go file.
-func generate(pkg string) error {
+// generate runs the gen subcommand.
+//
+// Given one or more packages, gen will create the wire_gen.go file for each.
+func generate(pkgs ...string) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	out, errs := wire.Generate(context.Background(), wd, os.Environ(), pkg)
+	outs, errs := wire.Generate(context.Background(), wd, os.Environ(), pkgs)
 	if len(errs) > 0 {
 		logErrors(errs)
 		return errors.New("generate failed")
 	}
-	if len(out.Content) == 0 {
-		// No Wire directives, don't write anything.
-		fmt.Fprintln(os.Stderr, "wire: no injector found for", pkg)
+	if len(outs) == 0 {
 		return nil
 	}
-	return out.Commit()
+	success := true
+	for _, out := range outs {
+		if len(out.Errs) > 0 {
+			fmt.Fprintf(os.Stderr, "%s: generate failed\n", out.PkgPath)
+			logErrors(out.Errs)
+			success = false
+		}
+		if len(out.Content) == 0 {
+			// No Wire output. Maybe errors, maybe no Wire directives.
+			continue
+		}
+		if err := out.Commit(); err == nil {
+			fmt.Fprintf(os.Stderr, "%s: wrote %s\n", out.PkgPath, out.OutputPath)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s: failed to write %s: %v\n", out.PkgPath, out.OutputPath, err)
+			success = false
+		}
+	}
+	if !success {
+		return errors.New("at least one generate failure")
+	}
+	return nil
 }
 
 // show runs the show subcommand.

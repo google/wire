@@ -38,24 +38,31 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// GeneratedFile stores the content of a call to Generate and the
-// desired on-disk location of the file.
-type GeneratedFile struct {
-	Path    string
+// GenerateResult stores the result for a package from a call to Generate.
+type GenerateResult struct {
+	// PkgPath is the package's PkgPath.
+	PkgPath string
+	// OutputPath is the path where the generated output should be written.
+	// May be empty if there were errors.
+	OutputPath string
+	// Content is the gofmt'd source code that was generated. May be nil if
+	// there were errors during generation.
 	Content []byte
+	// Errs is a slice of errors identified during generation.
+	Errs []error
 }
 
 // Commit writes the generated file to disk.
-func (gen GeneratedFile) Commit() error {
+func (gen GenerateResult) Commit() error {
 	if len(gen.Content) == 0 {
 		return nil
 	}
-	return ioutil.WriteFile(gen.Path, gen.Content, 0666)
+	return ioutil.WriteFile(gen.OutputPath, gen.Content, 0666)
 }
 
-// Generate performs dependency injection for a single package,
-// returning the gofmt'd Go source code. The package pattern is defined
-// by the underlying build system. For the go tool, this is described at
+// Generate performs dependency injection for the packages that match the given
+// patterns, return a GenerateResult for each package. The package pattern is
+// defined by the underlying build system. For the go tool, this is described at
 // https://golang.org/cmd/go/#hdr-Package_lists_and_patterns
 //
 // wd is the working directory and env is the set of environment
@@ -63,34 +70,41 @@ func (gen GeneratedFile) Commit() error {
 // env is nil or empty, it is interpreted as an empty set of variables.
 // In case of duplicate environment variables, the last one in the list
 // takes precedence.
-func Generate(ctx context.Context, wd string, env []string, pkgPattern string) (GeneratedFile, []error) {
-	pkgs, errs := load(ctx, wd, env, []string{pkgPattern})
+//
+// Generate may return one or more errors if it failed to load the packages.
+func Generate(ctx context.Context, wd string, env []string, patterns []string) ([]GenerateResult, []error) {
+	pkgs, errs := load(ctx, wd, env, patterns)
 	if len(errs) > 0 {
-		return GeneratedFile{}, errs
+		return nil, errs
 	}
-	if len(pkgs) != 1 {
-		// This is more of a violated precondition than anything else.
-		return GeneratedFile{}, []error{fmt.Errorf("load: got %d packages", len(pkgs))}
+	generated := make([]GenerateResult, len(pkgs))
+	for i, pkg := range pkgs {
+		generated[i].PkgPath = pkg.PkgPath
+		outDir, err := detectOutputDir(pkg.GoFiles)
+		if err != nil {
+			generated[i].Errs = append(generated[i].Errs, err)
+			continue
+		}
+		generated[i].OutputPath = filepath.Join(outDir, "wire_gen.go")
+		g := newGen(pkg)
+		injectorFiles, errs := generateInjectors(g, pkg)
+		if len(errs) > 0 {
+			generated[i].Errs = errs
+			continue
+		}
+		copyNonInjectorDecls(g, injectorFiles, pkg.TypesInfo)
+		goSrc := g.frame()
+		fmtSrc, err := format.Source(goSrc)
+		if err != nil {
+			// This is likely a bug from a poorly generated source file.
+			// Add an error but also the unformatted source.
+			generated[i].Errs = append(generated[i].Errs, err)
+		} else {
+			goSrc = fmtSrc
+		}
+		generated[i].Content = goSrc
 	}
-	outDir, err := detectOutputDir(pkgs[0].GoFiles)
-	if err != nil {
-		return GeneratedFile{}, []error{fmt.Errorf("load: %v", err)}
-	}
-	outFname := filepath.Join(outDir, "wire_gen.go")
-	g := newGen(pkgs[0])
-	injectorFiles, errs := generateInjectors(g, pkgs[0])
-	if len(errs) > 0 {
-		return GeneratedFile{}, errs
-	}
-	copyNonInjectorDecls(g, injectorFiles, pkgs[0].TypesInfo)
-	goSrc := g.frame()
-	fmtSrc, err := format.Source(goSrc)
-	if err != nil {
-		// This is likely a bug from a poorly generated source file.
-		// Return an error and the unformatted source.
-		return GeneratedFile{Path: outFname, Content: goSrc}, []error{err}
-	}
-	return GeneratedFile{Path: outFname, Content: fmtSrc}, nil
+	return generated, nil
 }
 
 func detectOutputDir(paths []string) (string, error) {
