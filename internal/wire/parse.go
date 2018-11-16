@@ -455,7 +455,7 @@ func (oc *objectCache) get(obj types.Object) (val interface{}, errs []error) {
 	switch obj := obj.(type) {
 	case *types.Var:
 		spec := oc.varDecl(obj)
-		if len(spec.Values) == 0 {
+		if spec == nil || len(spec.Values) == 0 {
 			return nil, []error{fmt.Errorf("%v is not a provider or a provider set", obj)}
 		}
 		var i int
