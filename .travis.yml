@@ -40,7 +40,6 @@ install:
   - "go install github.com/mattn/goveralls"
 
 script:
-  - 'internal/testing/runchecks.sh'
   - 'go test -race -coverpkg=./... -coverprofile=coverage.out ./...'
   - 'goveralls -coverprofile=coverage.out -service=travis-ci'
 
