@@ -71,11 +71,9 @@ again. If you are submitting code on behalf of your employer, there's
 *   Build your changes using Go 1.11 with Go modules enabled. Wire's continuous
     integration uses Go modules in order to ensure
     [reproducible builds](https://research.swtch.com/vgo-repro).
-*   Test your changes using `go test -short .`. You can omit the `-short` if you
-    actually want to test your change against a cloud platform and you have a
-    permissions level that enable you to do so. Please add tests that show the
+*   Test your changes using `go test ./...`. Please add tests that show the
     change does what it says it does, even if there wasn't a test in the first
-    place. Don't add the replay files to your commits.
+    place.
 *   Feel free to make as many commits as you want; we will squash them all into
     a single commit before merging your change.
 *   Check the diffs, write a useful description (including something like
@@ -148,8 +146,7 @@ As a reviewer:
 When squashing-and-merging:
 
 -   Ensure that **all** of the Assignees have approved.
--   Do a final review of the one-line PR summary, ensuring that it meets the
-    guidelines (e.g., "blob: add more blobbing") and accurately describes the
-    change.
+-   Do a final review of the one-line PR summary, ensuring that it accurately
+    describes the change.
 -   Delete the automatically added commit lines; these are generally not
     interesting and make commit history harder to read.
