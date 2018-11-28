@@ -1,5 +1,9 @@
 # Wire: Automated Initialization in Go
 
+[![Build Status](https://travis-ci.com/google/wire.svg?branch=master)][travis]
+[![godoc](https://godoc.org/github.com/google/wire?status.svg)][godoc]
+[![Coverage Status](https://coveralls.io/repos/github/google/wire/badge.svg?branch=master)](https://coveralls.io/github/google/wire?branch=master)
+
 Wire is a code generation tool that automates connecting components using
 [dependency injection][]. Dependencies between components are represented in
 Wire as function parameters, encouraging explicit initialization instead of
@@ -11,6 +15,8 @@ For an overview, see the [introductory blog post][].
 
 [dependency injection]: https://en.wikipedia.org/wiki/Dependency_injection
 [introductory blog post]: https://blog.golang.org/wire
+[godoc]: https://godoc.org/github.com/google/wire
+[travis]: https://travis-ci.com/google/wire
 
 ## Installing
 
