@@ -31,7 +31,7 @@ milestone which means the issue is intended to be worked on. Issues that we
 would like to address but do not have time for are placed into the [Unplanned][]
 milestone.
 
-[Unplanned]: https://github.com/google/go-cloud/milestone/2
+[Unplanned]: https://github.com/google/wire/milestone/1
 
 ## Contributing Code
 
