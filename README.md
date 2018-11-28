@@ -537,17 +537,6 @@ primitives and API.
 
 [Dagger 2]: https://google.github.io/dagger/
 
-### Why is Wire part of Go Cloud?
-
-Wire was designed to reduce the toil in setting up the multitude of dependencies
-often found when interacting with common cloud providers. However, Wire is not
-coupled to Go Cloud or cloud servers: Wire is a standalone tool.
-
-The Go Cloud team is investigating splitting out Wire as its own repository.
-Follow [#513][] for updates.
-
-[#513]: https://github.com/google/go-cloud/issues/513
-
 ### Why use pseudo-functions to create provider sets or injectors?
 
 In the early prototypes, Wire directives were specially formatted comments. This
