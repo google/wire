@@ -14,7 +14,7 @@
 
 // Package wire contains directives for Wire code generation.
 // For an overview of working with Wire, see the user guide at
-// https://github.com/google/wire/blob/master/README.md
+// https://github.com/google/wire/blob/master/docs/guide.md
 //
 // The directives in this package are used as input to the Wire code generation
 // tool. The entry point of Wire's analysis are injector functions: function
