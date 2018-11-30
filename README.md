@@ -30,10 +30,12 @@ and ensuring that `$GOPATH/bin` is added to your `$PATH`.
 
 ## Documentation
 
+- [Tutorial][]
 - [User Guide][]
 - [Best Practices][]
 - [FAQ][]
 
+[Tutorial]: ./_tutorial/README.md
 [Best Practices]: ./docs/best-practices.md
 [FAQ]: ./docs/faq.md
 [User Guide]: ./docs/guide.md
