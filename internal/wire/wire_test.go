@@ -73,7 +73,7 @@ func TestWire(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// TODO(light): These tests should be parallelizable, but this causes
-			// intermittent failures. See https://github.com/google/go-cloud/issues/669
+			// intermittent failures. See https://github.com/google/wire/issues/66
 			// for details.
 
 			// Materialize a temporary GOPATH directory.
