@@ -38,8 +38,10 @@ import (
 const usage = "usage: wire [gen|diff|show|check] [...]"
 
 func main() {
-	var err error
-	exitCode := 0
+	var (
+		exitCode = 0
+		err      error
+	)
 	switch {
 	case len(os.Args) == 2 && (os.Args[1] == "help" || os.Args[1] == "-h" || os.Args[1] == "-help" || os.Args[1] == "--help"):
 		fmt.Fprintln(os.Stderr, usage)
@@ -71,13 +73,13 @@ func main() {
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "wire:", err)
+		// Don't override more specific error codes from above
+		// (e.g., diff returns 2 on error).
 		if exitCode == 0 {
 			exitCode = 1
 		}
 	}
-	if exitCode != 0 {
-		os.Exit(exitCode)
-	}
+	os.Exit(exitCode)
 }
 
 // generate runs the gen subcommand.
@@ -128,20 +130,29 @@ func generate(pkgs ...string) error {
 // Similar to the diff command, it returns 0 if no diff, 1 if different, 2
 // plus an error if trouble.
 func diff(pkgs ...string) (int, error) {
+	errReturn := func(err error) (int, error) {
+		return 2, err
+	}
+	okReturn := func(hadDiff bool) (int, error) {
+		if hadDiff {
+			return 1, nil
+		}
+		return 0, nil
+	}
 	wd, err := os.Getwd()
 	if err != nil {
-		return 2, err
+		return errReturn(err)
 	}
 	outs, errs := wire.Generate(context.Background(), wd, os.Environ(), pkgs)
 	if len(errs) > 0 {
 		logErrors(errs)
-		return 2, errors.New("generate failed")
+		return errReturn(errors.New("generate failed"))
 	}
 	if len(outs) == 0 {
-		return 0, nil
+		return okReturn(false)
 	}
 	success := true
-	diffs := false
+	hadDiff := false
 	for _, out := range outs {
 		if len(out.Errs) > 0 {
 			fmt.Fprintf(os.Stderr, "%s: generate failed\n", out.PkgPath)
@@ -160,7 +171,7 @@ func diff(pkgs ...string) (int, error) {
 		}); err == nil {
 			if diff != "" {
 				fmt.Fprintf(os.Stdout, "%s: diff from %s:\n%s", out.PkgPath, out.OutputPath, diff)
-				diffs = true
+				hadDiff = true
 			}
 		} else {
 			fmt.Fprintf(os.Stderr, "%s: failed to diff %s: %v\n", out.PkgPath, out.OutputPath, err)
@@ -168,12 +179,9 @@ func diff(pkgs ...string) (int, error) {
 		}
 	}
 	if !success {
-		return 2, errors.New("at least one generate failure")
+		return errReturn(errors.New("at least one generate failure"))
 	}
-	if diffs {
-		return 1, nil
-	}
-	return 0, nil
+	return okReturn(hadDiff)
 }
 
 // show runs the show subcommand.
