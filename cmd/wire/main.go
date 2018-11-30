@@ -38,7 +38,10 @@ import (
 const usage = "usage: wire [gen|diff|show|check] [...]"
 
 func main() {
-	var err error
+	var (
+		exitCode = 0
+		err      error
+	)
 	switch {
 	case len(os.Args) == 2 && (os.Args[1] == "help" || os.Args[1] == "-h" || os.Args[1] == "-help" || os.Args[1] == "--help"):
 		fmt.Fprintln(os.Stderr, usage)
@@ -52,9 +55,9 @@ func main() {
 	case len(os.Args) > 2 && os.Args[1] == "check":
 		err = check(os.Args[2:]...)
 	case len(os.Args) == 2 && os.Args[1] == "diff":
-		err = diff(".")
+		exitCode, err = diff(".")
 	case len(os.Args) > 2 && os.Args[1] == "diff":
-		err = diff(os.Args[2:]...)
+		exitCode, err = diff(os.Args[2:]...)
 	case len(os.Args) == 2 && os.Args[1] == "gen":
 		err = generate(".")
 	case len(os.Args) > 2 && os.Args[1] == "gen":
@@ -66,12 +69,17 @@ func main() {
 		err = generate(os.Args[1:]...)
 	default:
 		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(64)
+		exitCode = 64
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "wire:", err)
-		os.Exit(1)
+		// Don't override more specific error codes from above
+		// (e.g., diff returns 2 on error).
+		if exitCode == 0 {
+			exitCode = 1
+		}
 	}
+	os.Exit(exitCode)
 }
 
 // generate runs the gen subcommand.
@@ -118,20 +126,33 @@ func generate(pkgs ...string) error {
 //
 // Given one or more packages, diff will generate the content for the
 // wire_gen.go file, and output the diff against the existing file.
-func diff(pkgs ...string) error {
+//
+// Similar to the diff command, it returns 0 if no diff, 1 if different, 2
+// plus an error if trouble.
+func diff(pkgs ...string) (int, error) {
+	errReturn := func(err error) (int, error) {
+		return 2, err
+	}
+	okReturn := func(hadDiff bool) (int, error) {
+		if hadDiff {
+			return 1, nil
+		}
+		return 0, nil
+	}
 	wd, err := os.Getwd()
 	if err != nil {
-		return err
+		return errReturn(err)
 	}
 	outs, errs := wire.Generate(context.Background(), wd, os.Environ(), pkgs)
 	if len(errs) > 0 {
 		logErrors(errs)
-		return errors.New("generate failed")
+		return errReturn(errors.New("generate failed"))
 	}
 	if len(outs) == 0 {
-		return nil
+		return okReturn(false)
 	}
 	success := true
+	hadDiff := false
 	for _, out := range outs {
 		if len(out.Errs) > 0 {
 			fmt.Fprintf(os.Stderr, "%s: generate failed\n", out.PkgPath)
@@ -149,7 +170,8 @@ func diff(pkgs ...string) error {
 			B: difflib.SplitLines(string(out.Content)),
 		}); err == nil {
 			if diff != "" {
-				fmt.Fprintf(os.Stderr, "%s: diff from %s:\n%s", out.PkgPath, out.OutputPath, diff)
+				fmt.Fprintf(os.Stdout, "%s: diff from %s:\n%s", out.PkgPath, out.OutputPath, diff)
+				hadDiff = true
 			}
 		} else {
 			fmt.Fprintf(os.Stderr, "%s: failed to diff %s: %v\n", out.PkgPath, out.OutputPath, err)
@@ -157,9 +179,9 @@ func diff(pkgs ...string) error {
 		}
 	}
 	if !success {
-		return errors.New("at least one generate failure")
+		return errReturn(errors.New("at least one generate failure"))
 	}
-	return nil
+	return okReturn(hadDiff)
 }
 
 // show runs the show subcommand.
