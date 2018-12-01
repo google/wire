@@ -333,12 +333,12 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 	}
 
 	// Perform one pass to collect all imports, followed by the real pass.
-	injectPass(name, params, injectSig, calls, &injectorGen{
+	injectPass(name, sig, calls, &injectorGen{
 		g:       g,
 		errVar:  disambiguate("err", g.nameInFileScope),
 		discard: true,
 	})
-	injectPass(name, params, injectSig, calls, &injectorGen{
+	injectPass(name, sig, calls, &injectorGen{
 		g:       g,
 		errVar:  disambiguate("err", g.nameInFileScope),
 		discard: false,
@@ -551,7 +551,14 @@ type injectorGen struct {
 }
 
 // injectPass generates an injector given the output from analysis.
-func injectPass(name string, params *types.Tuple, injectSig outputSignature, calls []call, ig *injectorGen) {
+// The sig passed in should be verified.
+func injectPass(name string, sig *types.Signature, calls []call, ig *injectorGen) {
+	params := sig.Params()
+	injectSig, err := funcOutput(sig)
+	if err != nil {
+		// This should be checked by the caller already.
+		panic(err)
+	}
 	ig.p("func %s(", name)
 	for i := 0; i < params.Len(); i++ {
 		if i > 0 {
@@ -565,7 +572,13 @@ func injectPass(name string, params *types.Tuple, injectSig outputSignature, cal
 			a = disambiguate(a, ig.nameInInjector)
 		}
 		ig.paramNames = append(ig.paramNames, a)
-		ig.p("%s %s", ig.paramNames[i], types.TypeString(pi.Type(), ig.g.qualifyPkg))
+		if sig.Variadic() && i == params.Len()-1 {
+			// Keep the varargs signature instead of a slice for the last argument if the
+			// injector is variadic.
+			ig.p("%s ...%s", ig.paramNames[i], types.TypeString(pi.Type().(*types.Slice).Elem(), ig.g.qualifyPkg))
+		} else {
+			ig.p("%s %s", ig.paramNames[i], types.TypeString(pi.Type(), ig.g.qualifyPkg))
+		}
 	}
 	outTypeString := types.TypeString(injectSig.out, ig.g.qualifyPkg)
 	switch {
@@ -638,6 +651,9 @@ func (ig *injectorGen) funcProviderCall(lname string, c *call, injectSig outputS
 		} else {
 			ig.p("%s", ig.localNames[a-len(ig.paramNames)])
 		}
+	}
+	if c.varargs {
+		ig.p("...")
 	}
 	ig.p(")\n")
 	if c.hasErr {

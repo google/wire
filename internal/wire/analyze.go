@@ -57,6 +57,9 @@ type call struct {
 	// This will be nil for kind == valueExpr.
 	args []int
 
+	// varargs is true if the provider function is variadic.
+	varargs bool
+
 	// fieldNames maps the arguments to struct field names.
 	// This will only be set if kind == structProvider.
 	fieldNames []string
@@ -192,6 +195,7 @@ dfs:
 				pkg:        p.Pkg,
 				name:       p.Name,
 				args:       args,
+				varargs:    p.Varargs,
 				fieldNames: p.Fields,
 				ins:        ins,
 				out:        curr.t,

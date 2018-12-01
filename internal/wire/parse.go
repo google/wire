@@ -153,6 +153,9 @@ type Provider struct {
 	// Args is the list of data dependencies this provider has.
 	Args []ProviderInput
 
+	// Varargs is true if the provider function is variadic.
+	Varargs bool
+
 	// IsStruct is true if this provider is a named struct type.
 	// Otherwise it's a function.
 	IsStruct bool
@@ -639,6 +642,7 @@ func processFuncProvider(fset *token.FileSet, fn *types.Func) (*Provider, []erro
 		Name:       fn.Name(),
 		Pos:        fn.Pos(),
 		Args:       make([]ProviderInput, params.Len()),
+		Varargs:    sig.Variadic(),
 		Out:        []types.Type{providerSig.out},
 		HasCleanup: providerSig.cleanup,
 		HasErr:     providerSig.err,
