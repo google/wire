@@ -339,7 +339,7 @@ to add a provider for `Greeter`. Let's see what happens:
 
 ``` go
 func InitializeEvent(phrase string) (Event, error) {
-    wire.Build(NewEvent, NewMessage) // woops! We to add a provider for Greeter
+    wire.Build(NewEvent, NewMessage) // woops! We forgot to add a provider for Greeter
     return Event{}, nil
 }
 ```
