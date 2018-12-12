@@ -204,6 +204,8 @@ dfs:
 			})
 		case pv.IsValue():
 			v := pv.Value()
+			src := set.srcMap.At(curr.t).(*providerSetSrc)
+			used = append(used, src)
 			if !types.Identical(v.Out, curr.t) {
 				// Interface binding.  Don't create a call ourselves.
 				i := index.At(v.Out)
@@ -214,8 +216,6 @@ dfs:
 				index.Set(curr.t, i)
 				continue
 			}
-			src := set.srcMap.At(curr.t).(*providerSetSrc)
-			used = append(used, src)
 			index.Set(curr.t, given.Len()+len(calls))
 			calls = append(calls, call{
 				kind:          valueExpr,
