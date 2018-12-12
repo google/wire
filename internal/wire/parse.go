@@ -939,8 +939,8 @@ func (pt ProvidedType) IsNil() bool {
 	return pt.p == nil && pt.v == nil && pt.a == nil
 }
 
-// ConcreteType returns the concrete type that was provided.
-func (pt ProvidedType) ConcreteType() types.Type {
+// Type returns the concrete type that was provided.
+func (pt ProvidedType) Type() types.Type {
 	return pt.t
 }
 
