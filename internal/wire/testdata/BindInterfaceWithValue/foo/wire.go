@@ -23,10 +23,10 @@ import (
 	"github.com/google/wire"
 )
 
-func injectReader() io.Reader {
+func inject() io.Writer {
 	wire.Build(
-		wire.Value(os.Stdin),
-		wire.Bind(new(io.Reader), new(os.File)),
+		wire.Value(os.Stdout),
+		wire.Bind(new(io.Writer), new(os.File)),
 	)
 	return nil
 }

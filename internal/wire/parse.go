@@ -942,7 +942,7 @@ func (pt ProvidedType) IsNil() bool {
 // Type returns the output type.
 //
 //   - For a function provider, this is the first return value type.
-// 	 - For a struct provider, this is either the struct type or the pointer type
+//   - For a struct provider, this is either the struct type or the pointer type
 // 	   whose element type is the struct type.
 // 	 - For a value, this is the type of the expression.
 // 	 - For an argument, this is the type of the argument.

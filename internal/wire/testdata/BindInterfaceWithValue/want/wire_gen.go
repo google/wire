@@ -12,11 +12,11 @@ import (
 
 // Injectors from wire.go:
 
-func injectReader() io.Reader {
+func inject() io.Writer {
 	file := _wireFileValue
 	return file
 }
 
 var (
-	_wireFileValue = os.Stdin
+	_wireFileValue = os.Stdout
 )

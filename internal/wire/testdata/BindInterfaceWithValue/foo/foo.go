@@ -14,13 +14,7 @@
 
 package main
 
-import (
-	"fmt"
-	"io/ioutil"
-)
-
 func main() {
-	r := injectReader()
-	buf, _ := ioutil.ReadAll(r)
-	fmt.Println(string(buf))
+	w := inject()
+	w.Write([]byte("Hello, World!"))
 }
