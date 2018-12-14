@@ -114,8 +114,8 @@ dfs:
 			continue
 		}
 
-		switch pv := set.For(curr.t); {
-		case pv.IsNil():
+		pv := set.For(curr.t)
+		if pv.IsNil() {
 			if curr.from == nil {
 				ec.add(fmt.Errorf("no provider found for %s, output of injector", types.TypeString(curr.t, nil)))
 				index.Set(curr.t, errAbort)
@@ -129,33 +129,25 @@ dfs:
 			ec.add(errors.New(sb.String()))
 			index.Set(curr.t, errAbort)
 			continue
-		case pv.IsArg():
-			src := set.srcMap.At(curr.t).(*providerSetSrc)
-			used = append(used, src)
-			if concrete := pv.ConcreteType(); !types.Identical(concrete, curr.t) {
-				// Interface binding.
-				i := index.At(concrete)
-				if i == nil {
-					stk = append(stk, curr, frame{t: concrete, from: curr.t, up: &curr})
-					continue
-				}
-				index.Set(curr.t, i)
-			}
-			continue
-		case pv.IsProvider():
-			p := pv.Provider()
-			src := set.srcMap.At(curr.t).(*providerSetSrc)
-			used = append(used, src)
-			if concrete := pv.ConcreteType(); !types.Identical(concrete, curr.t) {
-				// Interface binding.  Don't create a call ourselves.
-				i := index.At(concrete)
-				if i == nil {
-					stk = append(stk, curr, frame{t: concrete, from: curr.t, up: &curr})
-					continue
-				}
-				index.Set(curr.t, i)
+		}
+		src := set.srcMap.At(curr.t).(*providerSetSrc)
+		used = append(used, src)
+		if concrete := pv.Type(); !types.Identical(concrete, curr.t) {
+			// Interface binding does not create a call.
+			i := index.At(concrete)
+			if i == nil {
+				stk = append(stk, curr, frame{t: concrete, from: curr.t, up: &curr})
 				continue
 			}
+			index.Set(curr.t, i)
+			continue
+		}
+
+		switch pv := set.For(curr.t); {
+		case pv.IsArg():
+			// Continue, already added to stk.
+		case pv.IsProvider():
+			p := pv.Provider()
 			// Ensure that all argument types have been visited. If not, push them
 			// on the stack in reverse order so that calls are added in argument
 			// order.
@@ -204,18 +196,6 @@ dfs:
 			})
 		case pv.IsValue():
 			v := pv.Value()
-			if !types.Identical(v.Out, curr.t) {
-				// Interface binding.  Don't create a call ourselves.
-				i := index.At(v.Out)
-				if i == nil {
-					stk = append(stk, curr, frame{t: v.Out, from: curr.t, up: &curr})
-					continue
-				}
-				index.Set(curr.t, i)
-				continue
-			}
-			src := set.srcMap.At(curr.t).(*providerSetSrc)
-			used = append(used, src)
 			index.Set(curr.t, given.Len()+len(calls))
 			calls = append(calls, call{
 				kind:          valueExpr,

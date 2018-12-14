@@ -939,8 +939,14 @@ func (pt ProvidedType) IsNil() bool {
 	return pt.p == nil && pt.v == nil && pt.a == nil
 }
 
-// ConcreteType returns the concrete type that was provided.
-func (pt ProvidedType) ConcreteType() types.Type {
+// Type returns the output type.
+//
+//   - For a function provider, this is the first return value type.
+//   - For a struct provider, this is either the struct type or the pointer type
+// 	   whose element type is the struct type.
+// 	 - For a value, this is the type of the expression.
+// 	 - For an argument, this is the type of the argument.
+func (pt ProvidedType) Type() types.Type {
 	return pt.t
 }
 
