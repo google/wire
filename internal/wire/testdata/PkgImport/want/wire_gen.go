@@ -9,6 +9,11 @@ import (
 	"example.com/bar"
 )
 
+import (
+	_ "example.com/anon1"
+	_ "example.com/anon2"
+)
+
 // Injectors from wire.go:
 
 func injectFooBar() FooBar {

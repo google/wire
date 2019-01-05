@@ -171,6 +171,12 @@ func generateInjectors(g *gen, pkg *packages.Package) (injectorFiles []*ast.File
 				continue
 			}
 		}
+
+		for _, impt := range f.Imports {
+			if impt.Name != nil && impt.Name.Name == "_" {
+				g.anonImports[impt.Path.Value] = true
+			}
+		}
 	}
 	if len(ec.errors) > 0 {
 		return nil, ec.errors
@@ -224,12 +230,14 @@ type gen struct {
 	pkg     *packages.Package
 	buf     bytes.Buffer
 	imports map[string]importInfo
+	anonImports map[string]bool
 	values  map[ast.Expr]string
 }
 
 func newGen(pkg *packages.Package) *gen {
 	return &gen{
 		pkg:     pkg,
+		anonImports: make(map[string]bool),
 		imports: make(map[string]importInfo),
 		values:  make(map[ast.Expr]string),
 	}
@@ -262,6 +270,19 @@ func (g *gen) frame() []byte {
 			} else {
 				fmt.Fprintf(&buf, "\t%q\n", path)
 			}
+		}
+		buf.WriteString(")\n\n")
+	}
+	if len(g.anonImports) > 0 {
+		buf.WriteString("import (\n")
+		anonImps := make([]string, 0, len(g.anonImports))
+		for path, _ := range g.anonImports {
+			anonImps = append(anonImps, path)
+		}
+		sort.Strings(anonImps)
+
+		for _, path := range anonImps {
+			fmt.Fprintf(&buf, "\t_ %s\n", path)
 		}
 		buf.WriteString(")\n\n")
 	}
