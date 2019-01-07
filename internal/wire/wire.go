@@ -227,19 +227,19 @@ type importInfo struct {
 
 // gen is the file-wide generator state.
 type gen struct {
-	pkg     *packages.Package
-	buf     bytes.Buffer
-	imports map[string]importInfo
+	pkg         *packages.Package
+	buf         bytes.Buffer
+	imports     map[string]importInfo
 	anonImports map[string]bool
-	values  map[ast.Expr]string
+	values      map[ast.Expr]string
 }
 
 func newGen(pkg *packages.Package) *gen {
 	return &gen{
-		pkg:     pkg,
+		pkg:         pkg,
 		anonImports: make(map[string]bool),
-		imports: make(map[string]importInfo),
-		values:  make(map[ast.Expr]string),
+		imports:     make(map[string]importInfo),
+		values:      make(map[ast.Expr]string),
 	}
 }
 

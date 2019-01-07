@@ -17,10 +17,9 @@
 package main
 
 import (
-	"github.com/google/wire"
+	_ "example.com/anon1"
 	_ "example.com/anon2"
-	_ "example.com/anon1"
-	_ "example.com/anon1"
+	"github.com/google/wire"
 )
 
 func injectFooBar() FooBar {
