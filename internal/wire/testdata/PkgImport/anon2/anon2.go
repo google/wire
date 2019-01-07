@@ -12,17 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build wireinject
-
-package main
-
-import (
-	_ "example.com/anon1"
-	_ "example.com/anon2"
-	"github.com/google/wire"
-)
-
-func injectFooBar() FooBar {
-	wire.Build(Set)
-	return 0
-}
+package anon2
