@@ -179,8 +179,12 @@ dfs:
 			}
 			index.Set(curr.t, given.Len()+len(calls))
 			kind := funcProviderCall
+			fieldNames := []string(nil)
 			if p.IsStruct {
 				kind = structProvider
+				for _, arg := range p.Args {
+					fieldNames = append(fieldNames, arg.FieldName)
+				}
 			}
 			calls = append(calls, call{
 				kind:       kind,
@@ -188,7 +192,7 @@ dfs:
 				name:       p.Name,
 				args:       args,
 				varargs:    p.Varargs,
-				fieldNames: p.Fields,
+				fieldNames: fieldNames,
 				ins:        ins,
 				out:        curr.t,
 				hasCleanup: p.HasCleanup,
