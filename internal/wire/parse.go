@@ -160,10 +160,6 @@ type Provider struct {
 	// Otherwise it's a function.
 	IsStruct bool
 
-	// Fields lists the field names to populate. This will map 1:1 with
-	// elements in Args.
-	Fields []string
-
 	// Out is the set of types this provider produces. It will always
 	// contain at least one type.
 	Out []types.Type
@@ -181,7 +177,8 @@ type Provider struct {
 type ProviderInput struct {
 	Type types.Type
 
-	// TODO(light): Move field name into this struct.
+	// If the provider is a struct, FieldName will be the field name to set.
+	FieldName string
 }
 
 // Value describes a value expression.
@@ -724,16 +721,15 @@ func processStructProvider(fset *token.FileSet, typeName *types.TypeName) (*Prov
 		Name:     typeName.Name(),
 		Pos:      pos,
 		Args:     make([]ProviderInput, st.NumFields()),
-		Fields:   make([]string, st.NumFields()),
 		IsStruct: true,
 		Out:      []types.Type{out, types.NewPointer(out)},
 	}
 	for i := 0; i < st.NumFields(); i++ {
 		f := st.Field(i)
 		provider.Args[i] = ProviderInput{
-			Type: f.Type(),
+			Type:      f.Type(),
+			FieldName: f.Name(),
 		}
-		provider.Fields[i] = f.Name()
 		for j := 0; j < i; j++ {
 			if types.Identical(provider.Args[i].Type, provider.Args[j].Type) {
 				return nil, []error{notePosition(fset.Position(pos), fmt.Errorf("provider struct has multiple fields of type %s", types.TypeString(provider.Args[j].Type, nil)))}
