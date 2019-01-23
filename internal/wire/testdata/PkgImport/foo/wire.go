@@ -18,6 +18,7 @@ package main
 
 import (
 	_ "example.com/anon1" // intentionally duplicated
+	_ "example.com/anon1" // intentionally duplicated
 	_ "example.com/anon2"
 	"github.com/google/wire"
 )
