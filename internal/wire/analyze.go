@@ -353,9 +353,11 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 		}
 		concrete := providerMap.At(b.Provided)
 		if concrete == nil {
-			pos := fset.Position(b.Pos)
-			typ := types.TypeString(b.Provided, nil)
-			ec.add(notePosition(pos, fmt.Errorf("no binding for %s", typ)))
+			setName := set.VarName
+			if setName == "" {
+				setName = "wire.Build"
+			}
+			ec.add(notePosition(fset.Position(b.Pos), fmt.Errorf("%s binds concrete type %q to interface %q, but does not include a provider for %q", setName, b.Provided, b.Iface, b.Provided)))
 			continue
 		}
 		providerMap.Set(b.Iface, concrete)
