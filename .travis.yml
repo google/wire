@@ -15,6 +15,7 @@
 os:
   - linux
   - osx
+  - windows
 
 language: go
 go_import_path: github.com/google/wire
@@ -33,9 +34,13 @@ before_install:
 install:
   # Re-checkout files preserving line feeds. This prevents Windows builds from
   # converting \n to \r\n.
-  - "git config --global core.autocrlf input"
-  - "git checkout -- ."
-  - "go install ./cmd/wire"
+  - if [[ "$TRAVIS_OS_NAME" == "windows" ]]; then
+      cd ../..;
+      mv $TRAVIS_REPO_SLUG _old;
+      git config --global core.autocrlf false;
+      git clone _old $TRAVIS_REPO_SLUG;
+      cd $TRAVIS_REPO_SLUG;
+    fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
       go install github.com/mattn/goveralls;
     fi
