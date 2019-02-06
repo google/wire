@@ -15,10 +15,9 @@
 os:
   - linux
   - osx
-  - windows
 
 language: go
-go_import_path: github.com/google/go-cloud
+go_import_path: github.com/google/wire
 go: "1.11.x"
 
 before_install:
@@ -37,11 +36,12 @@ install:
   - "git config --global core.autocrlf input"
   - "git checkout -- ."
   - "go install ./cmd/wire"
-  - "go install github.com/mattn/goveralls"
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+      go install github.com/mattn/goveralls;
+    fi
 
 script:
-  - 'go test -race -coverpkg=./... -coverprofile=coverage.out ./...'
-  - 'goveralls -coverprofile=coverage.out -service=travis-ci'
+  - 'internal/runtests.sh'
 
 env:
   global:
