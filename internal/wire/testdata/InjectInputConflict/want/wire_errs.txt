@@ -1,4 +1,4 @@
-example.com/foo/wire.go:x:y: wire.Build has multiple bindings for example.com/foo.Foo
+example.com/foo/wire.go:x:y: multiple bindings for example.com/foo.Foo
 current:
 <- provider "provideFoo" (example.com/foo/foo.go:x:y)
 <- provider set "Set" (example.com/foo/foo.go:x:y)

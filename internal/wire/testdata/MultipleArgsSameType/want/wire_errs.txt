@@ -1,4 +1,4 @@
-example.com/foo/wire.go:x:y: wire.Build has multiple bindings for string
+example.com/foo/wire.go:x:y: multiple bindings for string
 current:
 <- argument b to injector function inject (example.com/foo/wire.go:x:y)
 previous:
