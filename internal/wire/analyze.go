@@ -353,9 +353,11 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 		}
 		concrete := providerMap.At(b.Provided)
 		if concrete == nil {
-			pos := fset.Position(b.Pos)
-			typ := types.TypeString(b.Provided, nil)
-			ec.add(notePosition(pos, fmt.Errorf("no binding for %s", typ)))
+			setName := set.VarName
+			if setName == "" {
+				setName = "provider set"
+			}
+			ec.add(notePosition(fset.Position(b.Pos), fmt.Errorf("wire.Bind of concrete type %q to interface %q, but %s does not include a provider for %q", b.Provided, b.Iface, setName, b.Provided)))
 			continue
 		}
 		providerMap.Set(b.Iface, concrete)
@@ -438,12 +440,10 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 // for the same output type.
 func bindingConflictError(fset *token.FileSet, typ types.Type, set *ProviderSet, cur, prev *providerSetSrc) error {
 	sb := new(strings.Builder)
-	if set.VarName == "" {
-		fmt.Fprintf(sb, "wire.Build")
-	} else {
-		fmt.Fprintf(sb, set.VarName)
+	if set.VarName != "" {
+		fmt.Fprintf(sb, "%s has ", set.VarName)
 	}
-	fmt.Fprintf(sb, " has multiple bindings for %s\n", types.TypeString(typ, nil))
+	fmt.Fprintf(sb, "multiple bindings for %s\n", types.TypeString(typ, nil))
 	fmt.Fprintf(sb, "current:\n<- %s\n", strings.Join(cur.trace(fset, typ), "\n<- "))
 	fmt.Fprintf(sb, "previous:\n<- %s", strings.Join(prev.trace(fset, typ), "\n<- "))
 	return notePosition(fset.Position(set.Pos), errors.New(sb.String()))

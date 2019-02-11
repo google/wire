@@ -276,7 +276,7 @@ func (g *gen) frame() []byte {
 	if len(g.anonImports) > 0 {
 		buf.WriteString("import (\n")
 		anonImps := make([]string, 0, len(g.anonImports))
-		for path, _ := range g.anonImports {
+		for path := range g.anonImports {
 			anonImps = append(anonImps, path)
 		}
 		sort.Strings(anonImps)
