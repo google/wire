@@ -1,3 +1,4 @@
 {
   "issue_title_pattern": "^.*$"
+  "pull_request_title_pattern": "^.*$"
 }
