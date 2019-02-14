@@ -27,9 +27,17 @@ result=0
 # because it is slow, and Coveralls will only save the last one anyway.
 if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
   go test -race -coverpkg=./... -coverprofile=coverage.out ./... || result=1
-  if [ -f coverage.out ]; then
-    goveralls -coverprofile=coverage.out -service=travis-ci
-  fi
+  #if [ -f coverage.out ]; then
+    #goveralls -coverprofile=coverage.out -service=travis-ci
+  #fi
+  # Ensure that the code has no extra dependencies (including transitive
+  # dependencies) that we're not already aware of by comparing with
+  # ./internal/alldeps
+  #
+  # Whenever project dependencies change, rerun ./internal/listdeps.sh
+  ./internal/listdeps.sh | diff ./internal/alldeps - || {
+    echo "FAIL: dependencies changed; compare listdeps.sh output with alldeps" && result=1
+  }
 else
   go test -race ./... || result=1
 fi
