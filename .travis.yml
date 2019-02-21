@@ -50,5 +50,4 @@ script:
 
 env:
   global:
-  - GOPROXY=https://storage.googleapis.com/wire-modules/
   - GO111MODULE=on
