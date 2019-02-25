@@ -2,7 +2,8 @@
 
 [![Build Status](https://travis-ci.com/google/wire.svg?branch=master)][travis]
 [![godoc](https://godoc.org/github.com/google/wire?status.svg)][godoc]
-[![Coverage Status](https://coveralls.io/repos/github/google/wire/badge.svg?branch=master)](https://coveralls.io/github/google/wire?branch=master)
+[![Coverage](https://codecov.io/gh/google/wire/branch/master/graph/badge.svg)](https://codecov.io/gh/google/wire)
+
 
 Wire is a code generation tool that automates connecting components using
 [dependency injection][]. Dependencies between components are represented in

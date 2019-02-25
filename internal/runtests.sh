@@ -24,11 +24,10 @@ fi
 result=0
 
 # Run Go tests. Only do coverage for the Linux build
-# because it is slow, and Coveralls will only save the last one anyway.
+# because it is slow, and codecov will only save the last one anyway.
 if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
   go test -race -coverpkg=./... -coverprofile=coverage.out ./... || result=1
   if [ -f coverage.out ]; then
-    goveralls -coverprofile=coverage.out -service=travis-ci
     bash <(curl -s https://codecov.io/bash)
   fi
   # Ensure that the code has no extra dependencies (including transitive
