@@ -30,7 +30,8 @@ type ProviderSet struct{}
 
 // NewSet creates a new provider set that includes the providers in its
 // arguments. Each argument is a function value, a struct (zero) value, a
-// provider set, a call to Bind, a call to Value, or a call to InterfaceValue.
+// provider set, a call to Bind, a call to Value, a call to InterfaceValue or a
+// call to FieldsOf.
 //
 // Passing a function value to NewSet declares that the function's first
 // return value type will be provided by calling the function. The arguments
@@ -131,4 +132,23 @@ func Value(interface{}) ProvidedValue {
 //	var MySet = wire.NewSet(wire.InterfaceValue(new(io.Reader), os.Stdin))
 func InterfaceValue(typ interface{}, x interface{}) ProvidedValue {
 	return ProvidedValue{}
+}
+
+// StructFields is a collection of the fields from a struct.
+type StructFields struct{}
+
+// FieldsOf extracts the structType into a list of types specified by fieldNames.
+// All types should be provided in the same provider set. The structType argument
+// must be a pointer to the struct it wishes to reference.
+//
+// Example:
+//
+//  type S struct {
+//  	MyFoo *Foo
+//  	MyBar *Bar
+//  }
+//  func NewStruct() *S { /* ... */ }
+//  var Set = wire.NewSet(wire.FieldsOf(new(S), "Foo", "Bar"))
+func FieldsOf(structType interface{}, fieldNames ...string) StructFields {
+	return StructFields{}
 }

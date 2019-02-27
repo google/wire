@@ -69,3 +69,9 @@ func provideOneOfTwo() OneOfTwo {
 func provideTwoOfTwo() TwoOfTwo {
 	return 1
 }
+
+type Baz struct {
+	Cfg BazConfig
+}
+
+type BazConfig int

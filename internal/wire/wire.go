@@ -623,6 +623,8 @@ func injectPass(name string, sig *types.Signature, calls []call, ig *injectorGen
 			ig.funcProviderCall(lname, c, injectSig)
 		case valueExpr:
 			ig.valueExpr(lname, c)
+		case fieldsExpr:
+			ig.fieldExpr(lname, c)
 		default:
 			panic("unknown kind")
 		}
@@ -713,6 +715,15 @@ func (ig *injectorGen) structProviderCall(lname string, c *call) {
 
 func (ig *injectorGen) valueExpr(lname string, c *call) {
 	ig.p("\t%s := %s\n", lname, ig.g.values[c.valueExpr])
+}
+
+func (ig *injectorGen) fieldExpr(lname string, c *call) {
+	a := c.args[0]
+	if a < len(ig.paramNames) {
+		ig.p("\t%s := %s.%s\n", lname, ig.paramNames[a], c.name)
+	} else {
+		ig.p("\t%s := %s.%s\n", lname, ig.localNames[a-len(ig.paramNames)], c.name)
+	}
 }
 
 // nameInInjector reports whether name collides with any other identifier

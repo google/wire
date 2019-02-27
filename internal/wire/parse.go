@@ -37,6 +37,7 @@ type providerSetSrc struct {
 	Value       *Value
 	Import      *ProviderSet
 	InjectorArg *InjectorArg
+	Field       *Field
 }
 
 // description returns a string describing the source of p, including line numbers.
@@ -63,6 +64,8 @@ func (p *providerSetSrc) description(fset *token.FileSet, typ types.Type) string
 	case p.InjectorArg != nil:
 		args := p.InjectorArg.Args
 		return fmt.Sprintf("argument %s to injector function %s (%s)", args.Tuple.At(p.InjectorArg.Index).Name(), args.Name, fset.Position(args.Pos))
+	case p.Field != nil:
+		return fmt.Sprintf("wire.FieldsOf (%s)", fset.Position(p.Field.Pos))
 	}
 	panic("providerSetSrc with no fields set")
 }
@@ -96,6 +99,7 @@ type ProviderSet struct {
 	Providers []*Provider
 	Bindings  []*IfaceBinding
 	Values    []*Value
+	Fields    []*Field
 	Imports   []*ProviderSet
 	// InjectorArgs is only filled in for wire.Build.
 	InjectorArgs *InjectorArgs
@@ -212,6 +216,21 @@ type InjectorArgs struct {
 	Tuple *types.Tuple
 	// Pos is the source position of the injector function.
 	Pos token.Pos
+}
+
+// Field describes a list of fields from a struct.
+type Field struct {
+	// Parent is the struct the field belongs to.
+	Parent types.Type
+	// Name is the field name.
+	Name string
+	// Pkg is the package that the struct resides in.
+	Pkg *types.Package
+	// Pos is the source position of the func keyword or type spec
+	// defining these fields.
+	Pos token.Pos
+	// Out is the set of types in the fields list.
+	Out types.Type
 }
 
 // Load finds all the provider sets in the packages that match the given
@@ -436,8 +455,8 @@ func newObjectCache(pkgs []*packages.Package) *objectCache {
 	return oc
 }
 
-// get converts a Go object into a Wire structure. It may return a
-// *Provider, an *IfaceBinding, a *ProviderSet, or a *Value.
+// get converts a Go object into a Wire structure. It may return a *Provider, an
+// *IfaceBinding, a *ProviderSet, a *Value, or a *Fields.
 func (oc *objectCache) get(obj types.Object) (val interface{}, errs []error) {
 	ref := objRef{
 		importPath: obj.Pkg().Path(),
@@ -493,8 +512,8 @@ func (oc *objectCache) varDecl(obj *types.Var) *ast.ValueSpec {
 	return nil
 }
 
-// processExpr converts an expression into a Wire structure. It may
-// return a *Provider, an *IfaceBinding, a *ProviderSet, or a *Value.
+// processExpr converts an expression into a Wire structure. It may return a
+// *Provider, an *IfaceBinding, a *ProviderSet, a *Value or a *Field.
 func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Expr, varName string) (interface{}, []error) {
 	exprPos := oc.fset.Position(expr.Pos())
 	expr = astutil.Unparen(expr)
@@ -527,6 +546,12 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 			return v, nil
 		case "InterfaceValue":
 			v, err := processInterfaceValue(oc.fset, info, call)
+			if err != nil {
+				return nil, []error{notePosition(exprPos, err)}
+			}
+			return v, nil
+		case "FieldsOf":
+			v, err := processFieldsOf(oc.fset, info, call)
 			if err != nil {
 				return nil, []error{notePosition(exprPos, err)}
 			}
@@ -570,6 +595,8 @@ func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast
 			pset.Bindings = append(pset.Bindings, item)
 		case *Value:
 			pset.Values = append(pset.Values, item)
+		case []*Field:
+			pset.Fields = append(pset.Fields, item...)
 		default:
 			panic("unknown item type")
 		}
@@ -845,6 +872,62 @@ func processInterfaceValue(fset *token.FileSet, info *types.Info, call *ast.Call
 	}, nil
 }
 
+// processFieldsOf creates a list of fields from a wire.FieldsOf call.
+func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) ([]*Field, error) {
+	// Assumes that call.Fun is wire.FieldsOf.
+
+	if len(call.Args) < 2 {
+		return nil, notePosition(fset.Position(call.Pos()),
+			errors.New("call to FieldsOf must specify fields to be extracted"))
+	}
+	structType := info.TypeOf(call.Args[0])
+	structPtr, ok := structType.(*types.Pointer)
+	if !ok {
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf("first argument to FieldsOf must be a pointer to a struct; found %s", types.TypeString(structType, nil)))
+	}
+	struc, ok := structPtr.Elem().Underlying().(*types.Struct)
+	if !ok {
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf("first argument to FieldsOf must be a pointer to a struct; found %s", types.TypeString(struc, nil)))
+	}
+	if struc.NumFields() < len(call.Args)-1 {
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf("fields number exceeds the number available in the struct which has %d fields", struc.NumFields()))
+	}
+
+	fields := make([]*Field, 0, len(call.Args)-1)
+	for i := 1; i < len(call.Args); i++ {
+		v, err := checkField(call.Args[i], struc)
+		if err != nil {
+			return nil, notePosition(fset.Position(call.Pos()), err)
+		}
+		fields = append(fields, &Field{
+			Parent: structType, // do not use `struc` which is the anonymous struct type
+			Name:   v.Name(),
+			Pkg:    v.Pkg(),
+			Pos:    v.Pos(),
+			Out:    v.Type(),
+		})
+	}
+	return fields, nil
+}
+
+// checkField reports whether f is a field of st. f should be a string with the
+// field name.
+func checkField(f ast.Expr, st *types.Struct) (*types.Var, error) {
+	b, ok := f.(*ast.BasicLit)
+	if !ok {
+		return nil, fmt.Errorf("%v must be a string with the field name", f)
+	}
+	for i := 0; i < st.NumFields(); i++ {
+		if strings.EqualFold(strconv.Quote(st.Field(i).Name()), b.Value) {
+			return st.Field(i), nil
+		}
+	}
+	return nil, fmt.Errorf("%s is not a field of %s", b.Value, st.String())
+}
+
 // findInjectorBuild returns the wire.Build call if fn is an injector template.
 // It returns nil if the function is not an injector template.
 func findInjectorBuild(info *types.Info, fn *ast.FuncDecl) (*ast.CallExpr, error) {
@@ -928,11 +1011,12 @@ type ProvidedType struct {
 	p *Provider
 	v *Value
 	a *InjectorArg
+	f *Field
 }
 
 // IsNil reports whether pt is the zero value.
 func (pt ProvidedType) IsNil() bool {
-	return pt.p == nil && pt.v == nil && pt.a == nil
+	return pt.p == nil && pt.v == nil && pt.a == nil && pt.f == nil
 }
 
 // Type returns the output type.
@@ -961,6 +1045,11 @@ func (pt ProvidedType) IsArg() bool {
 	return pt.a != nil
 }
 
+// IsField reports whether pt points to a Fields.
+func (pt ProvidedType) IsField() bool {
+	return pt.f != nil
+}
+
 // Provider returns pt as a Provider pointer. It panics if pt does not point
 // to a Provider.
 func (pt ProvidedType) Provider() *Provider {
@@ -986,4 +1075,13 @@ func (pt ProvidedType) Arg() *InjectorArg {
 		panic("ProvidedType does not hold an Arg")
 	}
 	return pt.a
+}
+
+// Field returns pt as a Field pointer. It panics if pt does not point to a
+// struct Field.
+func (pt ProvidedType) Field() *Field {
+	if pt.f == nil {
+		panic("ProvidedType does not hold a Field")
+	}
+	return pt.f
 }

@@ -17,19 +17,33 @@
 package main
 
 import (
+	"fmt"
+
+	"example.com/bar"
+	"example.com/baz"
+	"example.com/foo"
 	"github.com/google/wire"
 )
 
-func injectBar() Bar {
+func newBazService(*baz.Config) *baz.Service {
 	wire.Build(
-		provideFoo,                            // needed as input for provideBar
-		provideBar,                            // needed for Bar
-		partiallyUsedSet,                      // 1/2 providers in the set are needed
-		provideUnused,                         // not needed -> error
-		wire.Value("unused"),                  // not needed -> error
-		unusedSet,                             // nothing in set is needed -> error
-		wire.Bind((*Fooer)(nil), (*Foo)(nil)), // binding to Fooer is not needed -> error
-		wire.FieldsOf(new(Baz), "Cfg"),        // Baz.Cfg not needed -> error
+		baz.Service{},
+		wire.FieldsOf(
+			new(baz.Config),
+			"Foo",
+			"Bar",
+		),
+		foo.New,
+		bar.New,
 	)
-	return 0
+	return nil
+}
+
+func main() {
+	cfg := &baz.Config{
+		Foo: &foo.Config{1},
+		Bar: &bar.Config{2},
+	}
+	svc := newBazService(cfg)
+	fmt.Println(svc.String())
 }

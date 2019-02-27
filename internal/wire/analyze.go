@@ -32,6 +32,7 @@ const (
 	funcProviderCall callKind = iota
 	structProvider
 	valueExpr
+	fieldsExpr
 )
 
 // A call represents a step of an injector function.  It may be either a
@@ -51,8 +52,9 @@ type call struct {
 	name string
 
 	// args is a list of arguments to call the provider with.  Each element is:
-	// a) one of the givens (args[i] < len(given)), or
+	// a) one of the givens (args[i] < len(given)),
 	// b) the result of a previous provider call (args[i] >= len(given))
+	// c) the parent struct for kind == fieldsExpr
 	//
 	// This will be nil for kind == valueExpr.
 	args []int
@@ -79,6 +81,9 @@ type call struct {
 
 	valueExpr     ast.Expr
 	valueTypeInfo *types.Info
+
+	// parent is the parent struct type for kind == fieldsExpr.
+	parent types.Type
 }
 
 // solve finds the sequence of calls required to produce an output type
@@ -207,6 +212,28 @@ dfs:
 				valueExpr:     v.expr,
 				valueTypeInfo: v.info,
 			})
+		case pv.IsField():
+			f := pv.Field()
+			if index.At(f.Parent) == nil {
+				// Make sure to visit the parent struct first. This is likely a
+				// Value call.
+				stk = append(stk, curr, frame{t: f.Parent, from: curr.t, up: &curr})
+				continue
+			}
+			index.Set(curr.t, given.Len()+len(calls))
+			var args []int
+			if v := index.At(f.Parent); v != nil {
+				// Use the args[0] to store the position of the parent struct.
+				args = append(args, v.(int))
+			}
+			calls = append(calls, call{
+				kind:   fieldsExpr,
+				pkg:    f.Pkg,
+				name:   f.Name,
+				out:    curr.t,
+				args:   args,
+				parent: f.Parent,
+			})
 		default:
 			panic("unknown return value from ProviderSet.For")
 		}
@@ -275,11 +302,24 @@ func verifyArgsUsed(set *ProviderSet, used []*providerSetSrc) []error {
 			errs = append(errs, fmt.Errorf("unused interface binding to type %s", types.TypeString(b.Iface, nil)))
 		}
 	}
+	for _, f := range set.Fields {
+		found := false
+		for _, u := range used {
+			if u.Field == f {
+				found = true
+				break
+			}
+		}
+		if !found {
+			errs = append(errs, fmt.Errorf("unused field %q.%s", f.Parent, f.Name))
+		}
+	}
 	return errs
 }
 
-// buildProviderMap creates the providerMap and srcMap fields for a given provider set.
-// The given provider set's providerMap and srcMap fields are ignored.
+// buildProviderMap creates the providerMap and srcMap fields for a given
+// provider set. The given provider set's providerMap and srcMap fields are
+// ignored.
 func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *ProviderSet) (*typeutil.Map, *typeutil.Map, []error) {
 	providerMap := new(typeutil.Map)
 	providerMap.SetHasher(hasher)
@@ -338,6 +378,15 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 		}
 		providerMap.Set(v.Out, &ProvidedType{t: v.Out, v: v})
 		srcMap.Set(v.Out, src)
+	}
+	for _, f := range set.Fields {
+		src := &providerSetSrc{Field: f}
+		if prevSrc := srcMap.At(f.Out); prevSrc != nil {
+			ec.add(bindingConflictError(fset, f.Out, set, src, prevSrc.(*providerSetSrc)))
+			continue
+		}
+		providerMap.Set(f.Out, &ProvidedType{t: f.Out, f: f})
+		srcMap.Set(f.Out, src)
 	}
 	if len(ec.errors) > 0 {
 		return nil, nil, ec.errors
@@ -398,8 +447,8 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 				continue
 			}
 			pt := x.(*ProvidedType)
-			if pt.IsValue() {
-				// Leaf: values do not have dependencies.
+			if pt.IsValue() || pt.IsField() {
+				// Leaf: values or fields do not have dependencies.
 				continue
 			}
 			if pt.IsArg() {

@@ -14,14 +14,17 @@ import (
 
 // Injectors from wire.go:
 
-func newMainService(config *foo.Config, barConfig *bar.Config, bazConfig *baz.Config) *MainService {
+func newMainService(mainConfig *MainConfig) *MainService {
+	config := mainConfig.Foo
 	service := foo.New(config)
+	barConfig := mainConfig.Bar
 	barService := bar.New(barConfig, service)
+	bazConfig := mainConfig.baz
 	bazService := baz.New(bazConfig, barService)
 	mainService := &MainService{
 		Foo: service,
 		Bar: barService,
-		Baz: bazService,
+		baz: bazService,
 	}
 	return mainService
 }
@@ -31,25 +34,25 @@ func newMainService(config *foo.Config, barConfig *bar.Config, bazConfig *baz.Co
 type MainConfig struct {
 	Foo *foo.Config
 	Bar *bar.Config
-	Baz *baz.Config
+	baz *baz.Config
 }
 
 type MainService struct {
 	Foo *foo.Service
 	Bar *bar.Service
-	Baz *baz.Service
+	baz *baz.Service
 }
 
 func (m *MainService) String() string {
-	return fmt.Sprintf("%d %d %d", m.Foo.Cfg.V, m.Bar.Cfg.V, m.Baz.Cfg.V)
+	return fmt.Sprintf("%d %d %d", m.Foo.Cfg.V, m.Bar.Cfg.V, m.baz.Cfg.V)
 }
 
 func main() {
 	cfg := &MainConfig{
 		Foo: &foo.Config{1},
 		Bar: &bar.Config{2},
-		Baz: &baz.Config{3},
+		baz: &baz.Config{3},
 	}
-	svc := newMainService(cfg.Foo, cfg.Bar, cfg.Baz)
+	svc := newMainService(cfg)
 	fmt.Println(svc.String())
 }
