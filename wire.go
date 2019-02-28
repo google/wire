@@ -141,14 +141,14 @@ type StructFields struct{}
 // to provide the types of those fields. The structType argument must be a
 // pointer to the struct it wishes to reference.
 //
-// Example:
+// The following example would provide *Foo and *Bar using S.MyFoo and S.MyBar respectively:
 //
 //  type S struct {
 //  	MyFoo *Foo
 //  	MyBar *Bar
 //  }
 //  func NewStruct() *S { /* ... */ }
-//  var Set = wire.NewSet(wire.FieldsOf(new(S), "Foo", "Bar"))
+//  var Set = wire.NewSet(wire.FieldsOf(new(S), "MyFoo", "MyBar"))
 func FieldsOf(structType interface{}, fieldNames ...string) StructFields {
 	return StructFields{}
 }

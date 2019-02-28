@@ -226,10 +226,10 @@ type Field struct {
 	Name string
 	// Pkg is the package that the struct resides in.
 	Pkg *types.Package
-	// Pos is the source position of the func keyword or type spec
+	// Pos is the source position of the field declaration.
 	// defining these fields.
 	Pos token.Pos
-	// Out is the set of types in the fields list.
+	// Out is the field's type.
 	Out types.Type
 }
 

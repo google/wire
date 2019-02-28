@@ -58,6 +58,8 @@ type call struct {
 	// c) the parent struct for kind == fieldsExpr
 	//
 	// This will be nil for kind == valueExpr.
+	// If kind == selectorExpr, then the length of this slice will be 1 and the
+	// "argument" will be the value to access fields from.
 	args []int
 
 	// varargs is true if the provider function is variadic.
