@@ -52,12 +52,12 @@ type call struct {
 	pkg  *types.Package
 	name string
 
-	// args is a list of arguments to call the provider with.  Each element is:
+	// args is a list of arguments to call the provider with. Each element is:
 	// a) one of the givens (args[i] < len(given)),
 	// b) the result of a previous provider call (args[i] >= len(given))
-	// c) the parent struct for kind == fieldsExpr
 	//
 	// This will be nil for kind == valueExpr.
+	//
 	// If kind == selectorExpr, then the length of this slice will be 1 and the
 	// "argument" will be the value to access fields from.
 	args []int
@@ -215,8 +215,8 @@ dfs:
 		case pv.IsField():
 			f := pv.Field()
 			if index.At(f.Parent) == nil {
-				// Make sure to visit the parent struct first. This is needed when the
-				// parent is not given.
+				// Fields have one dependency which is the parent struct. Make
+				// sure to visit it first if it is not already visited.
 				stk = append(stk, curr, frame{t: f.Parent, from: curr.t, up: &curr})
 				continue
 			}
