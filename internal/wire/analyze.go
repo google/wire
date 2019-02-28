@@ -32,7 +32,7 @@ const (
 	funcProviderCall callKind = iota
 	structProvider
 	valueExpr
-	fieldsExpr
+	selectorExpr
 )
 
 // A call represents a step of an injector function.  It may be either a
@@ -45,9 +45,10 @@ type call struct {
 	// out is the type this step produces.
 	out types.Type
 
-	// pkg and name identify the provider to call for kind ==
-	// funcProviderCall or the type to construct for kind ==
-	// structProvider.
+	// pkg and name identify one of the following:
+	// 1) the provider to call for kind == funcProviderCall;
+	// 2) the type to construct for kind == structProvider;
+	// 3) the name to select for kind == selectorExpr.
 	pkg  *types.Package
 	name string
 
@@ -81,9 +82,6 @@ type call struct {
 
 	valueExpr     ast.Expr
 	valueTypeInfo *types.Info
-
-	// parent is the parent struct type for kind == fieldsExpr.
-	parent types.Type
 }
 
 // solve finds the sequence of calls required to produce an output type
@@ -215,24 +213,25 @@ dfs:
 		case pv.IsField():
 			f := pv.Field()
 			if index.At(f.Parent) == nil {
-				// Make sure to visit the parent struct first. This is likely a
-				// Value call.
+				// Make sure to visit the parent struct first. This is needed when the
+				// parent is not given.
 				stk = append(stk, curr, frame{t: f.Parent, from: curr.t, up: &curr})
 				continue
 			}
 			index.Set(curr.t, given.Len()+len(calls))
-			var args []int
-			if v := index.At(f.Parent); v != nil {
-				// Use the args[0] to store the position of the parent struct.
-				args = append(args, v.(int))
+			v := index.At(f.Parent)
+			if v == errAbort {
+				index.Set(curr.t, errAbort)
+				continue dfs
 			}
+			// Use the args[0] to store the position of the parent struct.
+			args := []int{v.(int)}
 			calls = append(calls, call{
-				kind:   fieldsExpr,
-				pkg:    f.Pkg,
-				name:   f.Name,
-				out:    curr.t,
-				args:   args,
-				parent: f.Parent,
+				kind: selectorExpr,
+				pkg:  f.Pkg,
+				name: f.Name,
+				out:  curr.t,
+				args: args,
 			})
 		default:
 			panic("unknown return value from ProviderSet.For")
@@ -447,38 +446,49 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 				continue
 			}
 			pt := x.(*ProvidedType)
-			if pt.IsValue() || pt.IsField() {
+			switch {
+			case pt.IsValue():
 				// Leaf: values or fields do not have dependencies.
-				continue
-			}
-			if pt.IsArg() {
+			case pt.IsArg():
 				// Injector arguments do not have dependencies.
-				continue
-			}
-			if !pt.IsProvider() {
-				panic("invalid provider map value")
-			}
-			for _, arg := range pt.Provider().Args {
-				a := arg.Type
-				hasCycle := false
-				for i, b := range curr {
-					if types.Identical(a, b) {
-						sb := new(strings.Builder)
-						fmt.Fprintf(sb, "cycle for %s:\n", types.TypeString(a, nil))
-						for j := i; j < len(curr); j++ {
-							p := providerMap.At(curr[j]).(*ProvidedType).Provider()
-							fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Pkg.Path(), p.Name)
+			case pt.IsProvider() || pt.IsField():
+				var args []types.Type
+				if pt.IsProvider() {
+					for _, arg := range pt.Provider().Args {
+						args = append(args, arg.Type)
+					}
+				} else {
+					args = append(args, pt.Field().Parent)
+				}
+				for _, a := range args {
+					hasCycle := false
+					for i, b := range curr {
+						if types.Identical(a, b) {
+							sb := new(strings.Builder)
+							fmt.Fprintf(sb, "cycle for %s:\n", types.TypeString(a, nil))
+							for j := i; j < len(curr); j++ {
+								t := providerMap.At(curr[j]).(*ProvidedType)
+								if t.IsProvider() {
+									p := t.Provider()
+									fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Pkg.Path(), p.Name)
+								} else {
+									p := t.Field()
+									fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Parent, p.Name)
+								}
+							}
+							fmt.Fprintf(sb, "%s", types.TypeString(a, nil))
+							ec.add(errors.New(sb.String()))
+							hasCycle = true
+							break
 						}
-						fmt.Fprintf(sb, "%s", types.TypeString(a, nil))
-						ec.add(errors.New(sb.String()))
-						hasCycle = true
-						break
+					}
+					if !hasCycle {
+						next := append(append([]types.Type(nil), curr...), a)
+						stk = append(stk, next)
 					}
 				}
-				if !hasCycle {
-					next := append(append([]types.Type(nil), curr...), a)
-					stk = append(stk, next)
-				}
+			default:
+				panic("invalid provider map value")
 			}
 		}
 	}

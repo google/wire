@@ -623,7 +623,7 @@ func injectPass(name string, sig *types.Signature, calls []call, ig *injectorGen
 			ig.funcProviderCall(lname, c, injectSig)
 		case valueExpr:
 			ig.valueExpr(lname, c)
-		case fieldsExpr:
+		case selectorExpr:
 			ig.fieldExpr(lname, c)
 		default:
 			panic("unknown kind")

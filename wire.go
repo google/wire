@@ -137,9 +137,9 @@ func InterfaceValue(typ interface{}, x interface{}) ProvidedValue {
 // StructFields is a collection of the fields from a struct.
 type StructFields struct{}
 
-// FieldsOf extracts the structType into a list of types specified by fieldNames.
-// All types should be provided in the same provider set. The structType argument
-// must be a pointer to the struct it wishes to reference.
+// FieldsOf declares that the fields named of the given struct type will be used
+// to provide the types of those fields. The structType argument must be a
+// pointer to the struct it wishes to reference.
 //
 // Example:
 //

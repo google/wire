@@ -220,7 +220,7 @@ type InjectorArgs struct {
 
 // Field describes a list of fields from a struct.
 type Field struct {
-	// Parent is the struct the field belongs to.
+	// Parent is the struct or pointer to the struct that the field belongs to.
 	Parent types.Type
 	// Name is the field name.
 	Name string
@@ -884,7 +884,7 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 	structPtr, ok := structType.(*types.Pointer)
 	if !ok {
 		return nil, notePosition(fset.Position(call.Pos()),
-			fmt.Errorf("first argument to FieldsOf must be a pointer to a struct; found %s", types.TypeString(structType, nil)))
+			fmt.Errorf("first argument to FieldsOf must be a pointer; found %s", types.TypeString(structType, nil)))
 	}
 	struc, ok := structPtr.Elem().Underlying().(*types.Struct)
 	if !ok {
