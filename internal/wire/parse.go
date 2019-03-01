@@ -885,7 +885,7 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 	structPtr, ok := structType.(*types.Pointer)
 	if !ok {
 		return nil, notePosition(fset.Position(call.Pos()),
-			fmt.Errorf(firstArgReq, types.TypeString(structType, nil)))
+			fmt.Errorf(firstArgReqFormat, types.TypeString(structType, nil)))
 	}
 
 	var struc *types.Struct
@@ -894,13 +894,13 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 		struc, ok = t.Elem().Underlying().(*types.Struct)
 		if !ok {
 			return nil, notePosition(fset.Position(call.Pos()),
-				fmt.Errorf(firstArgReq, types.TypeString(struc, nil)))
+				fmt.Errorf(firstArgReqFormat, types.TypeString(struc, nil)))
 		}
 	case *types.Struct:
 		struc = t
 	default:
 		return nil, notePosition(fset.Position(call.Pos()),
-			fmt.Errorf(firstArgReq, types.TypeString(t, nil)))
+			fmt.Errorf(firstArgReqFormat, types.TypeString(t, nil)))
 	}
 	if struc.NumFields() < len(call.Args)-1 {
 		return nil, notePosition(fset.Position(call.Pos()),
