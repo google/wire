@@ -125,6 +125,9 @@ func Value(interface{}) ProvidedValue {
 }
 
 // InterfaceValue binds an expression to provide a specific interface type.
+// The first argument is a pointer to the interface which user wants to provide.
+// The second argument is the actual variable value whose type implements the
+// interface.
 //
 // Example:
 //
