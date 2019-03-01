@@ -20,7 +20,7 @@ import (
 	"github.com/google/wire"
 )
 
-func injectedBaz() *Baz {
+func injectedBaz() Baz {
 	wire.Build(provideFoo, provideBar, wire.FieldsOf(new(Bar), "Bz"))
-	return nil
+	return 0
 }

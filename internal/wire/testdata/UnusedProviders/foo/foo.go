@@ -70,8 +70,8 @@ func provideTwoOfTwo() TwoOfTwo {
 	return 1
 }
 
-type Baz struct {
-	Cfg BazConfig
+type S struct {
+	Cfg Config
 }
 
-type BazConfig int
+type Config int

@@ -29,7 +29,7 @@ func newBazService(*baz.Config) *baz.Service {
 	wire.Build(
 		baz.Service{},
 		wire.FieldsOf(
-			new(baz.Config),
+			new(*baz.Config),
 			"Foo",
 			"Bar",
 		),

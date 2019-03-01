@@ -29,7 +29,7 @@ func injectBar() Bar {
 		wire.Value("unused"),                  // not needed -> error
 		unusedSet,                             // nothing in set is needed -> error
 		wire.Bind((*Fooer)(nil), (*Foo)(nil)), // binding to Fooer is not needed -> error
-		wire.FieldsOf(new(Baz), "Cfg"),        // Baz.Cfg not needed -> error
+		wire.FieldsOf(new(S), "Cfg"),          // S.Cfg not needed -> error
 	)
 	return 0
 }

@@ -41,7 +41,7 @@ func (m *MainService) String() string {
 	return fmt.Sprintf("%d %d %d", m.Foo.Cfg.V, m.Bar.Cfg.V, m.baz.Cfg.V)
 }
 
-func newMainService(*MainConfig) *MainService {
+func newMainService(MainConfig) *MainService {
 	wire.Build(
 		MainService{},
 		wire.FieldsOf(
@@ -58,7 +58,7 @@ func newMainService(*MainConfig) *MainService {
 }
 
 func main() {
-	cfg := &MainConfig{
+	cfg := MainConfig{
 		Foo: &foo.Config{1},
 		Bar: &bar.Config{2},
 		baz: &baz.Config{3},

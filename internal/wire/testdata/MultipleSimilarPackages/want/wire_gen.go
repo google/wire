@@ -14,7 +14,7 @@ import (
 
 // Injectors from wire.go:
 
-func newMainService(mainConfig *MainConfig) *MainService {
+func newMainService(mainConfig MainConfig) *MainService {
 	config := mainConfig.Foo
 	service := foo.New(config)
 	barConfig := mainConfig.Bar
@@ -48,7 +48,7 @@ func (m *MainService) String() string {
 }
 
 func main() {
-	cfg := &MainConfig{
+	cfg := MainConfig{
 		Foo: &foo.Config{1},
 		Bar: &bar.Config{2},
 		baz: &baz.Config{3},

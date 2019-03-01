@@ -1,4 +1,4 @@
-// Copyright 2019 The Wire Authors
+// Copyright 2018 The Wire Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,27 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//+build wireinject
+
 package main
 
 import (
-	"fmt"
+	"github.com/google/wire"
 )
 
-func main() {
-	fmt.Println(injectedBaz())
-}
-
-type Foo int
-type Baz int
-
-type Bar struct {
-	Bz Baz
-}
-
-func provideFoo(_ Baz) Foo {
-	return 0
-}
-
-func provideBar(_ Foo) Bar {
-	return Bar{}
+func injectedMessage() string {
+	wire.Build(
+		provideS,
+		wire.FieldsOf(new(S), "Foo"))
+	return ""
 }

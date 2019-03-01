@@ -880,16 +880,27 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 		return nil, notePosition(fset.Position(call.Pos()),
 			errors.New("call to FieldsOf must specify fields to be extracted"))
 	}
+	firstArgReq := "first argument to FieldsOf must be a pointer to a struct or a pointer to a pointer to a struct; found %s"
 	structType := info.TypeOf(call.Args[0])
 	structPtr, ok := structType.(*types.Pointer)
 	if !ok {
 		return nil, notePosition(fset.Position(call.Pos()),
-			fmt.Errorf("first argument to FieldsOf must be a pointer; found %s", types.TypeString(structType, nil)))
+			fmt.Errorf(firstArgReq, types.TypeString(structType, nil)))
 	}
-	struc, ok := structPtr.Elem().Underlying().(*types.Struct)
-	if !ok {
+
+	var struc *types.Struct
+	switch t := structPtr.Elem().Underlying().(type) {
+	case *types.Pointer:
+		struc, ok = t.Elem().Underlying().(*types.Struct)
+		if !ok {
+			return nil, notePosition(fset.Position(call.Pos()),
+				fmt.Errorf(firstArgReq, types.TypeString(struc, nil)))
+		}
+	case *types.Struct:
+		struc = t
+	default:
 		return nil, notePosition(fset.Position(call.Pos()),
-			fmt.Errorf("first argument to FieldsOf must be a pointer to a struct; found %s", types.TypeString(struc, nil)))
+			fmt.Errorf(firstArgReq, types.TypeString(t, nil)))
 	}
 	if struc.NumFields() < len(call.Args)-1 {
 		return nil, notePosition(fset.Position(call.Pos()),
@@ -903,7 +914,7 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 			return nil, notePosition(fset.Position(call.Pos()), err)
 		}
 		fields = append(fields, &Field{
-			Parent: structType, // do not use `struc` which is the anonymous struct type
+			Parent: structPtr.Elem(),
 			Name:   v.Name(),
 			Pkg:    v.Pkg(),
 			Pos:    v.Pos(),
