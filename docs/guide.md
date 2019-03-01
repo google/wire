@@ -198,21 +198,29 @@ type Fooer interface {
     Foo() string
 }
 
-type Bar string
+type MyFooer string
 
-func (b *Bar) Foo() string {
+func (b *MyFooer) Foo() string {
     return string(*b)
 }
 
-func ProvideBar() *Bar {
-    b := new(Bar)
+func provideMyFooer() *MyFooer {
+    b := new(MyFooer)
     *b = "Hello, World!"
     return b
 }
 
-var BarFooer = wire.NewSet(
-    ProvideBar,
-    wire.Bind(new(Fooer), new(Bar)))
+type Bar string
+
+func provideBar(f Fooer) string {
+    // f will be a *MyFooer.
+    return f.Foo()
+}
+
+var Set = wire.NewSet(
+    provideMyFooer,
+    wire.Bind((*Fooer)(nil), (*MyFooer)(nil)),
+    provideBar)
 ```
 
 The first argument to `wire.Bind` is a pointer to a value of the desired
