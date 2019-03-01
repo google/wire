@@ -1,4 +1,4 @@
-// Copyright 2018 The Wire Authors
+// Copyright 2019 The Wire Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,57 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build wireinject
-
-package main
+package baz
 
 import (
 	"fmt"
 
 	"example.com/bar"
-	"example.com/baz"
 	"example.com/foo"
-	"github.com/google/wire"
 )
 
-type MainConfig struct {
+type Config struct {
 	Foo *foo.Config
 	Bar *bar.Config
-	baz *baz.Config
 }
 
-type MainService struct {
+type Service struct {
 	Foo *foo.Service
 	Bar *bar.Service
-	baz *baz.Service
 }
 
-func (m *MainService) String() string {
-	return fmt.Sprintf("%d %d %d", m.Foo.Cfg.V, m.Bar.Cfg.V, m.baz.Cfg.V)
-}
-
-func newMainService(MainConfig) *MainService {
-	wire.Build(
-		MainService{},
-		wire.FieldsOf(
-			new(MainConfig),
-			"Foo",
-			"Bar",
-			"baz",
-		),
-		foo.New,
-		bar.New,
-		baz.New,
-	)
-	return nil
-}
-
-func main() {
-	cfg := MainConfig{
-		Foo: &foo.Config{1},
-		Bar: &bar.Config{2},
-		baz: &baz.Config{3},
-	}
-	svc := newMainService(cfg)
-	fmt.Println(svc.String())
+func (m *Service) String() string {
+	return fmt.Sprintf("%d %d", m.Foo.Cfg.V, m.Bar.Cfg.V)
 }

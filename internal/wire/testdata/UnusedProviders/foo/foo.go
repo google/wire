@@ -69,3 +69,9 @@ func provideOneOfTwo() OneOfTwo {
 func provideTwoOfTwo() TwoOfTwo {
 	return 1
 }
+
+type S struct {
+	Cfg Config
+}
+
+type Config int

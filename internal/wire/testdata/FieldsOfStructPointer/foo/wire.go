@@ -20,16 +20,9 @@ import (
 	"github.com/google/wire"
 )
 
-func injectBar() Bar {
+func injectedMessage() string {
 	wire.Build(
-		provideFoo,                            // needed as input for provideBar
-		provideBar,                            // needed for Bar
-		partiallyUsedSet,                      // 1/2 providers in the set are needed
-		provideUnused,                         // not needed -> error
-		wire.Value("unused"),                  // not needed -> error
-		unusedSet,                             // nothing in set is needed -> error
-		wire.Bind((*Fooer)(nil), (*Foo)(nil)), // binding to Fooer is not needed -> error
-		wire.FieldsOf(new(S), "Cfg"),          // S.Cfg not needed -> error
-	)
-	return 0
+		provideS,
+		wire.FieldsOf(new(*S), "Foo"))
+	return ""
 }
