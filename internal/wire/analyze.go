@@ -450,7 +450,7 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 			pt := x.(*ProvidedType)
 			switch {
 			case pt.IsValue():
-				// Leaf: values or fields do not have dependencies.
+				// Leaf: values do not have dependencies.
 			case pt.IsArg():
 				// Injector arguments do not have dependencies.
 			case pt.IsProvider() || pt.IsField():
