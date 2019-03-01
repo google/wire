@@ -880,7 +880,7 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 		return nil, notePosition(fset.Position(call.Pos()),
 			errors.New("call to FieldsOf must specify fields to be extracted"))
 	}
-	firstArgReq := "first argument to FieldsOf must be a pointer to a struct or a pointer to a pointer to a struct; found %s"
+	const firstArgReqFormat = "first argument to FieldsOf must be a pointer to a struct or a pointer to a pointer to a struct; found %s"
 	structType := info.TypeOf(call.Args[0])
 	structPtr, ok := structType.(*types.Pointer)
 	if !ok {
