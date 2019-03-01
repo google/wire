@@ -195,31 +195,31 @@ provider set:
 
 ```go
 type Fooer interface {
-    Foo() Baz
+    Foo() string
 }
 
-type Bar string
+type MyFooer string
 
-func (b *Bar) Foo() Baz {
-    return Baz(*b)
+func (b *MyFooer) Foo() string {
+    return string(*b)
 }
 
-func provideBar() *Bar {
-    b := new(Bar)
+func provideMyFooer() *MyFooer {
+    b := new(MyFooer)
     *b = "Hello, World!"
     return b
 }
 
-type Baz string
+type Bar string
 
-func provideBaz(f Fooer) Baz {
+func provideBar(f Fooer) string {
     return f.Foo()
 }
 
 var Set = wire.NewSet(
-    provideBar,
-    wire.Bind((*Fooer)(nil), (*Bar)(nil)),
-    provideBaz)
+    provideMyFooer,
+    wire.Bind((*Fooer)(nil), (*MyFooer)(nil)),
+    provideBar)
 ```
 
 The first argument to `wire.Bind` is a pointer to a value of the desired
