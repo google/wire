@@ -233,6 +233,8 @@ func show(pkgs ...string) error {
 						out[types.TypeString(t, nil)] = v.Pos
 					case *wire.Value:
 						out[types.TypeString(t, nil)] = v.Pos
+					case *wire.Field:
+						out[types.TypeString(t, nil)] = v.Pos
 					default:
 						panic("unreachable")
 					}
@@ -285,7 +287,7 @@ func check(pkgs ...string) error {
 type outGroup struct {
 	name    string
 	inputs  *typeutil.Map // values are not important
-	outputs *typeutil.Map // values are *wire.Provider or *wire.Value
+	outputs *typeutil.Map // values are *wire.Provider, *wire.Value, or *wire.Field
 }
 
 // gather flattens a provider set into outputs grouped by the inputs
@@ -399,6 +401,38 @@ func gather(info *wire.Info, key wire.ProviderSetID) (_ []outGroup, imports map[
 				out := new(typeutil.Map)
 				out.SetHasher(hash)
 				out.Set(curr, v)
+				inputVisited.Set(curr, len(groups))
+				groups = append(groups, outGroup{
+					inputs:  in,
+					outputs: out,
+				})
+			case pv.IsField():
+				// Try to see if the parent struct hasn't been visited.
+				f := pv.Field()
+				if inputVisited.At(f.Parent) == nil {
+					stk = append(stk, curr, f.Parent)
+					continue
+				}
+				// Build the input map for the parent struct.
+				in := new(typeutil.Map)
+				in.SetHasher(hash)
+				i := inputVisited.At(f.Parent).(int)
+				if i == -1 {
+					in.Set(f.Parent, true)
+				} else {
+					mergeTypeSets(in, groups[i].inputs)
+				}
+				// Group all fields together under the same parent struct.
+				for i := range groups {
+					if sameTypeKeys(groups[i].inputs, in) {
+						groups[i].outputs.Set(curr, f)
+						inputVisited.Set(curr, i)
+						continue dfs
+					}
+				}
+				out := new(typeutil.Map)
+				out.SetHasher(hash)
+				out.Set(curr, f)
 				inputVisited.Set(curr, len(groups))
 				groups = append(groups, outGroup{
 					inputs:  in,
