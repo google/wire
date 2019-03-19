@@ -16,3 +16,11 @@ func injectFooBar() FooBar {
 	}
 	return fooBar
 }
+
+func injectPartFooBar() FooBar {
+	foo := provideFoo()
+	fooBar := FooBar{
+		Foo: foo,
+	}
+	return fooBar
+}

@@ -88,7 +88,6 @@ func Build(...interface{}) string {
 	return "implementation not generated, run wire"
 }
 
-// A Binding maps an interface to a concrete type.
 type Binding struct{}
 
 // Bind declares that a concrete type should be used to satisfy a
@@ -137,6 +136,26 @@ func InterfaceValue(typ interface{}, x interface{}) ProvidedValue {
 	return ProvidedValue{}
 }
 
+// A StructProvider represents a named struct.
+type StructProvider struct{}
+
+// Struct specifies that the given struct type will be provided by filling in the fields
+// in the struct that have the names given. Each of the arguments must be a name
+// to the field they wish to reference.
+//
+// For example:
+//
+//  type S struct {
+//    MyFoo *Foo
+//    MyBar *Bar
+//  }
+//  var Set = wire.NewSet(wire.Struct(new(S), "MyFoo")) -> inject only S.MyFoo
+//  var Set = wire.NewSet(wire.Struct(new(S), "*")) -> inject all fields
+func Struct(structType interface{}, fieldNames ...string) StructProvider {
+	return StructProvider{}
+}
+
+// A Binding maps an interface to a concrete type.
 // StructFields is a collection of the fields from a struct.
 type StructFields struct{}
 

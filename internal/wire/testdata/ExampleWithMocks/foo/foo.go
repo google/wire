@@ -51,8 +51,8 @@ func main() {
 
 // appSet is a provider set for creating a real app.
 var appSet = wire.NewSet(
-	app{},
-	greeter{},
+	wire.Struct(new(app), "*"),
+	wire.Struct(new(greeter), "*"),
 	wire.InterfaceValue(new(timer), realTime{}),
 )
 
@@ -61,17 +61,17 @@ var appSet = wire.NewSet(
 // arguments to the injector.
 // It is used for Approach A.
 var appSetWithoutMocks = wire.NewSet(
-	app{},
-	greeter{},
+	wire.Struct(new(app), "*"),
+	wire.Struct(new(greeter), "*"),
 )
 
 // mockAppSet is a provider set for creating a mocked app, including the mocked
 // dependencies.
 // It is used for Approach B.
 var mockAppSet = wire.NewSet(
-	app{},
-	greeter{},
-	appWithMocks{},
+	wire.Struct(new(app), "*"),
+	wire.Struct(new(greeter), "*"),
+	wire.Struct(new(appWithMocks), "*"),
 	// For each mocked dependency, add a provider and use wire.Bind to bind
 	// the concrete type to the relevant interface.
 	newMockTimer,

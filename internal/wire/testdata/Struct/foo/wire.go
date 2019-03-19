@@ -24,3 +24,8 @@ func injectFooBar() FooBar {
 	wire.Build(Set)
 	return FooBar{}
 }
+
+func injectPartFooBar() FooBar {
+	wire.Build(PartSet)
+	return FooBar{}
+}

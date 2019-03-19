@@ -27,7 +27,7 @@ import (
 
 func newBazService(*baz.Config) *baz.Service {
 	wire.Build(
-		baz.Service{},
+		wire.Struct(new(baz.Service), "*"),
 		wire.FieldsOf(
 			new(*baz.Config),
 			"Foo",

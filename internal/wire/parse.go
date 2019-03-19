@@ -550,6 +550,12 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 				return nil, []error{notePosition(exprPos, err)}
 			}
 			return v, nil
+		case "Struct":
+			s, err := processStructProvider(oc.fset, info, call)
+			if err != nil {
+				return nil, []error{notePosition(exprPos, err)}
+			}
+			return s, nil
 		case "FieldsOf":
 			v, err := processFieldsOf(oc.fset, info, call)
 			if err != nil {
@@ -559,13 +565,6 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 		default:
 			return nil, []error{notePosition(exprPos, errors.New("unknown pattern"))}
 		}
-	}
-	if tn := structArgType(info, expr); tn != nil {
-		p, errs := processStructProvider(oc.fset, tn)
-		if len(errs) > 0 {
-			return nil, notePositionAll(exprPos, errs)
-		}
-		return p, nil
 	}
 	return nil, []error{notePosition(exprPos, errors.New("unknown pattern"))}
 }
@@ -735,35 +734,78 @@ func funcOutput(sig *types.Signature) (outputSignature, error) {
 
 // processStructProvider creates a provider for a named struct type.
 // It produces pointer and non-pointer variants via two values in Out.
-func processStructProvider(fset *token.FileSet, typeName *types.TypeName) (*Provider, []error) {
-	out := typeName.Type()
-	st, ok := out.Underlying().(*types.Struct)
+func processStructProvider(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*Provider, error) {
+	// Assumes that call.Fun is wire.Struct.
+
+	if len(call.Args) < 1 {
+		return nil, notePosition(fset.Position(call.Pos()),
+			errors.New("call to Struct must specify the struct to be injected"))
+	}
+	const firstArgReqFormat = "first argument to Struct must be a pointer to a named struct; found %s"
+	structType := info.TypeOf(call.Args[0])
+	structPtr, ok := structType.(*types.Pointer)
 	if !ok {
-		return nil, []error{fmt.Errorf("%v does not name a struct", typeName)}
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf(firstArgReqFormat, types.TypeString(structType, nil)))
 	}
 
-	pos := typeName.Pos()
+	st, ok := structPtr.Elem().Underlying().(*types.Struct)
+	if !ok {
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf(firstArgReqFormat, types.TypeString(st, nil)))
+	}
+
+	stExpr := call.Args[0].(*ast.CallExpr)
+	typeName := qualifiedIdentObject(info, stExpr.Args[0]) // should be either an identifier or selector
 	provider := &Provider{
 		Pkg:      typeName.Pkg(),
 		Name:     typeName.Name(),
-		Pos:      pos,
-		Args:     make([]ProviderInput, st.NumFields()),
+		Pos:      typeName.Pos(),
 		IsStruct: true,
-		Out:      []types.Type{out, types.NewPointer(out)},
+		Out:      []types.Type{structPtr.Elem(), structPtr},
 	}
-	for i := 0; i < st.NumFields(); i++ {
-		f := st.Field(i)
-		provider.Args[i] = ProviderInput{
-			Type:      f.Type(),
-			FieldName: f.Name(),
+	if allFields(call) {
+		provider.Args = make([]ProviderInput, st.NumFields())
+		for i := 0; i < st.NumFields(); i++ {
+			f := st.Field(i)
+			provider.Args[i] = ProviderInput{
+				Type:      f.Type(),
+				FieldName: f.Name(),
+			}
 		}
+	} else {
+		provider.Args = make([]ProviderInput, len(call.Args)-1)
+		for i := 1; i < len(call.Args); i++ {
+			v, err := checkField(call.Args[i], st)
+			if err != nil {
+				return nil, notePosition(fset.Position(call.Pos()), err)
+			}
+			provider.Args[i-1] = ProviderInput{
+				Type:      v.Type(),
+				FieldName: v.Name(),
+			}
+		}
+	}
+	for i := 0; i < len(provider.Args); i++ {
 		for j := 0; j < i; j++ {
 			if types.Identical(provider.Args[i].Type, provider.Args[j].Type) {
-				return nil, []error{notePosition(fset.Position(pos), fmt.Errorf("provider struct has multiple fields of type %s", types.TypeString(provider.Args[j].Type, nil)))}
+				f := st.Field(j)
+				return nil, notePosition(fset.Position(f.Pos()), fmt.Errorf("provider struct has multiple fields of type %s", types.TypeString(provider.Args[j].Type, nil)))
 			}
 		}
 	}
 	return provider, nil
+}
+
+func allFields(call *ast.CallExpr) bool {
+	if len(call.Args) != 2 {
+		return false
+	}
+	b, ok := call.Args[1].(*ast.BasicLit)
+	if !ok {
+		return false
+	}
+	return strings.EqualFold(strconv.Quote("*"), b.Value)
 }
 
 // processBind creates an interface binding from a wire.Bind call.

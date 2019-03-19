@@ -43,7 +43,7 @@ func (m *MainService) String() string {
 
 func newMainService(MainConfig) *MainService {
 	wire.Build(
-		MainService{},
+		wire.Struct(new(MainService), "Foo", "Bar", "baz"),
 		wire.FieldsOf(
 			new(MainConfig),
 			"Foo",
