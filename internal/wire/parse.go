@@ -614,23 +614,6 @@ func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast
 	return pset, nil
 }
 
-// structArgType attempts to interpret an expression as a simple struct type.
-// It assumes any parentheses have been stripped.
-func structArgType(info *types.Info, expr ast.Expr) *types.TypeName {
-	lit, ok := expr.(*ast.CompositeLit)
-	if !ok {
-		return nil
-	}
-	tn, ok := qualifiedIdentObject(info, lit.Type).(*types.TypeName)
-	if !ok {
-		return nil
-	}
-	if _, isStruct := tn.Type().Underlying().(*types.Struct); !isStruct {
-		return nil
-	}
-	return tn
-}
-
 // qualifiedIdentObject finds the object for an identifier or a
 // qualified identifier, or nil if the object could not be found.
 func qualifiedIdentObject(info *types.Info, expr ast.Expr) types.Object {
