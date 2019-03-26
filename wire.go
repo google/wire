@@ -29,9 +29,9 @@ package wire
 type ProviderSet struct{}
 
 // NewSet creates a new provider set that includes the providers in its
-// arguments. Each argument is a function value, a struct (zero) value, a
-// provider set, a call to Bind, a call to Value, a call to InterfaceValue or a
-// call to FieldsOf.
+// arguments. Each argument is a function value, a provider set, a call to
+// Struct, a call to Bind, a call to Value, a call to InterfaceValue or a call
+// to FieldsOf.
 //
 // Passing a function value to NewSet declares that the function's first
 // return value type will be provided by calling the function. The arguments
@@ -47,6 +47,7 @@ type ProviderSet struct{}
 // Passing a struct value of type S to NewSet declares that both S and *S will
 // be provided by creating a new value of the appropriate type by filling in
 // each field of S using the provider of the field's type.
+// Deprecated: use wire.Struct.
 //
 // Passing a ProviderSet to NewSet is the same as if the set's contents
 // were passed as arguments to NewSet directly.

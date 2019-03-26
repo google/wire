@@ -566,6 +566,13 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 			return nil, []error{notePosition(exprPos, errors.New("unknown pattern"))}
 		}
 	}
+	if tn := structArgType(info, expr); tn != nil {
+		p, errs := processStructLitProvider(oc.fset, tn)
+		if len(errs) > 0 {
+			return nil, notePositionAll(exprPos, errs)
+		}
+		return p, nil
+	}
 	return nil, []error{notePosition(exprPos, errors.New("unknown pattern"))}
 }
 
@@ -612,6 +619,23 @@ func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast
 		return nil, errs
 	}
 	return pset, nil
+}
+
+// structArgType attempts to interpret an expression as a simple struct type.
+// It assumes any parentheses have been stripped.
+func structArgType(info *types.Info, expr ast.Expr) *types.TypeName {
+	lit, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		return nil
+	}
+	tn, ok := qualifiedIdentObject(info, lit.Type).(*types.TypeName)
+	if !ok {
+		return nil
+	}
+	if _, isStruct := tn.Type().Underlying().(*types.Struct); !isStruct {
+		return nil
+	}
+	return tn
 }
 
 // qualifiedIdentObject finds the object for an identifier or a
@@ -713,6 +737,43 @@ func funcOutput(sig *types.Signature) (outputSignature, error) {
 	default:
 		return outputSignature{}, errors.New("too many return values")
 	}
+}
+
+// processStructLitProvider creates a provider for a named struct type.
+// It produces pointer and non-pointer variants via two values in Out.
+//
+// This is a copy of the old processStructProvider, which is deprecated now.
+func processStructLitProvider(fset *token.FileSet, typeName *types.TypeName) (*Provider, []error) {
+	fmt.Println("Deprecated: use wire.Struct to inject a struct instead,",
+		"see https://godoc.org/github.com/google/wire#Struct for more information.")
+	out := typeName.Type()
+	st, ok := out.Underlying().(*types.Struct)
+	if !ok {
+		return nil, []error{fmt.Errorf("%v does not name a struct", typeName)}
+	}
+
+	pos := typeName.Pos()
+	provider := &Provider{
+		Pkg:      typeName.Pkg(),
+		Name:     typeName.Name(),
+		Pos:      pos,
+		Args:     make([]ProviderInput, st.NumFields()),
+		IsStruct: true,
+		Out:      []types.Type{out, types.NewPointer(out)},
+	}
+	for i := 0; i < st.NumFields(); i++ {
+		f := st.Field(i)
+		provider.Args[i] = ProviderInput{
+			Type:      f.Type(),
+			FieldName: f.Name(),
+		}
+		for j := 0; j < i; j++ {
+			if types.Identical(provider.Args[i].Type, provider.Args[j].Type) {
+				return nil, []error{notePosition(fset.Position(pos), fmt.Errorf("provider struct has multiple fields of type %s", types.TypeString(provider.Args[j].Type, nil)))}
+			}
+		}
+	}
+	return provider, nil
 }
 
 // processStructProvider creates a provider for a named struct type.
