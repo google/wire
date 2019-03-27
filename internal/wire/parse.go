@@ -21,6 +21,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"os"
 	"strconv"
 	"strings"
 
@@ -567,7 +568,7 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 		}
 	}
 	if tn := structArgType(info, expr); tn != nil {
-		p, errs := processStructLitProvider(oc.fset, tn)
+		p, errs := processStructLiteralProvider(oc.fset, tn)
 		if len(errs) > 0 {
 			return nil, notePositionAll(exprPos, errs)
 		}
@@ -739,13 +740,11 @@ func funcOutput(sig *types.Signature) (outputSignature, error) {
 	}
 }
 
-// processStructLitProvider creates a provider for a named struct type.
+// processStructLiteralProvider creates a provider for a named struct type.
 // It produces pointer and non-pointer variants via two values in Out.
 //
 // This is a copy of the old processStructProvider, which is deprecated now.
-func processStructLitProvider(fset *token.FileSet, typeName *types.TypeName) (*Provider, []error) {
-	fmt.Println("Deprecated: use wire.Struct to inject a struct instead,",
-		"see https://godoc.org/github.com/google/wire#Struct for more information.")
+func processStructLiteralProvider(fset *token.FileSet, typeName *types.TypeName) (*Provider, []error) {
 	out := typeName.Type()
 	st, ok := out.Underlying().(*types.Struct)
 	if !ok {
@@ -753,6 +752,10 @@ func processStructLitProvider(fset *token.FileSet, typeName *types.TypeName) (*P
 	}
 
 	pos := typeName.Pos()
+	fmt.Fprintf(os.Stderr,
+		"Deprecated: %v, see https://godoc.org/github.com/google/wire#Struct for more information.",
+		notePosition(fset.Position(pos),
+			fmt.Errorf("using struct literal to inject %s, use wire.Struct instead", typeName.Type())))
 	provider := &Provider{
 		Pkg:      typeName.Pkg(),
 		Name:     typeName.Name(),

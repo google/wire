@@ -44,16 +44,17 @@ type ProviderSet struct{}
 // will call all the appropriate cleanup functions and return the error from
 // the injector function.
 //
-// Passing a struct value of type S to NewSet declares that both S and *S will
-// be provided by creating a new value of the appropriate type by filling in
-// each field of S using the provider of the field's type.
-// Deprecated: use wire.Struct.
-//
 // Passing a ProviderSet to NewSet is the same as if the set's contents
 // were passed as arguments to NewSet directly.
 //
 // The behavior of passing the result of a call to other functions in this
 // package are described in their respective doc comments.
+//
+// For compatibility with older versions of Wire, passing a struct value of type
+// S to NewSet declares that both S and *S will be provided by creating a new
+// value of the appropriate type by filling in each field of S using the
+// provider of the field's type. This form is deprecated and will be removed in
+// a future version of Wire: new providers sets should use wire.Struct.
 func NewSet(...interface{}) ProviderSet {
 	return ProviderSet{}
 }
