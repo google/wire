@@ -22,7 +22,9 @@ import (
 
 func main() {
 	fb := injectFooBar()
+	pfb := injectPartFooBar()
 	fmt.Println(fb.Foo, fb.Bar)
+	fmt.Println(pfb.Foo, pfb.Bar)
 }
 
 type Foo int
@@ -42,6 +44,11 @@ func provideBar() Bar {
 }
 
 var Set = wire.NewSet(
-	FooBar{},
+	wire.Struct(new(FooBar), "*"),
 	provideFoo,
 	provideBar)
+
+var PartSet = wire.NewSet(
+	wire.Struct(new(FooBar), "Foo"),
+	provideFoo,
+)

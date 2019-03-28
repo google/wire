@@ -29,9 +29,9 @@ package wire
 type ProviderSet struct{}
 
 // NewSet creates a new provider set that includes the providers in its
-// arguments. Each argument is a function value, a struct (zero) value, a
-// provider set, a call to Bind, a call to Value, a call to InterfaceValue or a
-// call to FieldsOf.
+// arguments. Each argument is a function value, a provider set, a call to
+// Struct, a call to Bind, a call to Value, a call to InterfaceValue or a call
+// to FieldsOf.
 //
 // Passing a function value to NewSet declares that the function's first
 // return value type will be provided by calling the function. The arguments
@@ -44,15 +44,17 @@ type ProviderSet struct{}
 // will call all the appropriate cleanup functions and return the error from
 // the injector function.
 //
-// Passing a struct value of type S to NewSet declares that both S and *S will
-// be provided by creating a new value of the appropriate type by filling in
-// each field of S using the provider of the field's type.
-//
 // Passing a ProviderSet to NewSet is the same as if the set's contents
 // were passed as arguments to NewSet directly.
 //
 // The behavior of passing the result of a call to other functions in this
 // package are described in their respective doc comments.
+//
+// For compatibility with older versions of Wire, passing a struct value of type
+// S to NewSet declares that both S and *S will be provided by creating a new
+// value of the appropriate type by filling in each field of S using the
+// provider of the field's type. This form is deprecated and will be removed in
+// a future version of Wire: new providers sets should use wire.Struct.
 func NewSet(...interface{}) ProviderSet {
 	return ProviderSet{}
 }
@@ -135,6 +137,26 @@ func Value(interface{}) ProvidedValue {
 //	var MySet = wire.NewSet(wire.InterfaceValue(new(io.Reader), os.Stdin))
 func InterfaceValue(typ interface{}, x interface{}) ProvidedValue {
 	return ProvidedValue{}
+}
+
+// A StructProvider represents a named struct.
+type StructProvider struct{}
+
+// Struct specifies that the given struct type will be provided by filling in the fields
+// in the struct that have the names given. Each of the arguments must be a name
+// to the field they wish to reference. As a special case, if a single name "*"
+// is given, then all of the fields in the struct will be filled in.
+//
+// For example:
+//
+//  type S struct {
+//    MyFoo *Foo
+//    MyBar *Bar
+//  }
+//  var Set = wire.NewSet(wire.Struct(new(S), "MyFoo")) -> inject only S.MyFoo
+//  var Set = wire.NewSet(wire.Struct(new(S), "*")) -> inject all fields
+func Struct(structType interface{}, fieldNames ...string) StructProvider {
+	return StructProvider{}
 }
 
 // StructFields is a collection of the fields from a struct.

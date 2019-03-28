@@ -45,6 +45,6 @@ func provideBar() Bar {
 }
 
 var Set = wire.NewSet(
-	FooBar{},
+	wire.Struct(new(FooBar), "*"),
 	provideFoo,
 	provideBar)

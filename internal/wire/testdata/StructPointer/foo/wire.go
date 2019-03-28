@@ -26,6 +26,6 @@ func injectFooBar() *FooBar {
 }
 
 func injectEmptyStruct() *Empty {
-	wire.Build(Empty{})
+	wire.Build(wire.Struct(new(Empty)))
 	return nil
 }

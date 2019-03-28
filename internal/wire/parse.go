@@ -21,6 +21,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"os"
 	"strconv"
 	"strings"
 
@@ -550,6 +551,12 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 				return nil, []error{notePosition(exprPos, err)}
 			}
 			return v, nil
+		case "Struct":
+			s, err := processStructProvider(oc.fset, info, call)
+			if err != nil {
+				return nil, []error{notePosition(exprPos, err)}
+			}
+			return s, nil
 		case "FieldsOf":
 			v, err := processFieldsOf(oc.fset, info, call)
 			if err != nil {
@@ -561,7 +568,7 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 		}
 	}
 	if tn := structArgType(info, expr); tn != nil {
-		p, errs := processStructProvider(oc.fset, tn)
+		p, errs := processStructLiteralProvider(oc.fset, tn)
 		if len(errs) > 0 {
 			return nil, notePositionAll(exprPos, errs)
 		}
@@ -733,9 +740,11 @@ func funcOutput(sig *types.Signature) (outputSignature, error) {
 	}
 }
 
-// processStructProvider creates a provider for a named struct type.
+// processStructLiteralProvider creates a provider for a named struct type.
 // It produces pointer and non-pointer variants via two values in Out.
-func processStructProvider(fset *token.FileSet, typeName *types.TypeName) (*Provider, []error) {
+//
+// This is a copy of the old processStructProvider, which is deprecated now.
+func processStructLiteralProvider(fset *token.FileSet, typeName *types.TypeName) (*Provider, []error) {
 	out := typeName.Type()
 	st, ok := out.Underlying().(*types.Struct)
 	if !ok {
@@ -743,6 +752,10 @@ func processStructProvider(fset *token.FileSet, typeName *types.TypeName) (*Prov
 	}
 
 	pos := typeName.Pos()
+	fmt.Fprintf(os.Stderr,
+		"Deprecated: %v, see https://godoc.org/github.com/google/wire#Struct for more information.",
+		notePosition(fset.Position(pos),
+			fmt.Errorf("using struct literal to inject %s, use wire.Struct instead", typeName.Type())))
 	provider := &Provider{
 		Pkg:      typeName.Pkg(),
 		Name:     typeName.Name(),
@@ -764,6 +777,82 @@ func processStructProvider(fset *token.FileSet, typeName *types.TypeName) (*Prov
 		}
 	}
 	return provider, nil
+}
+
+// processStructProvider creates a provider for a named struct type.
+// It produces pointer and non-pointer variants via two values in Out.
+func processStructProvider(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*Provider, error) {
+	// Assumes that call.Fun is wire.Struct.
+
+	if len(call.Args) < 1 {
+		return nil, notePosition(fset.Position(call.Pos()),
+			errors.New("call to Struct must specify the struct to be injected"))
+	}
+	const firstArgReqFormat = "first argument to Struct must be a pointer to a named struct; found %s"
+	structType := info.TypeOf(call.Args[0])
+	structPtr, ok := structType.(*types.Pointer)
+	if !ok {
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf(firstArgReqFormat, types.TypeString(structType, nil)))
+	}
+
+	st, ok := structPtr.Elem().Underlying().(*types.Struct)
+	if !ok {
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf(firstArgReqFormat, types.TypeString(st, nil)))
+	}
+
+	stExpr := call.Args[0].(*ast.CallExpr)
+	typeName := qualifiedIdentObject(info, stExpr.Args[0]) // should be either an identifier or selector
+	provider := &Provider{
+		Pkg:      typeName.Pkg(),
+		Name:     typeName.Name(),
+		Pos:      typeName.Pos(),
+		IsStruct: true,
+		Out:      []types.Type{structPtr.Elem(), structPtr},
+	}
+	if allFields(call) {
+		provider.Args = make([]ProviderInput, st.NumFields())
+		for i := 0; i < st.NumFields(); i++ {
+			f := st.Field(i)
+			provider.Args[i] = ProviderInput{
+				Type:      f.Type(),
+				FieldName: f.Name(),
+			}
+		}
+	} else {
+		provider.Args = make([]ProviderInput, len(call.Args)-1)
+		for i := 1; i < len(call.Args); i++ {
+			v, err := checkField(call.Args[i], st)
+			if err != nil {
+				return nil, notePosition(fset.Position(call.Pos()), err)
+			}
+			provider.Args[i-1] = ProviderInput{
+				Type:      v.Type(),
+				FieldName: v.Name(),
+			}
+		}
+	}
+	for i := 0; i < len(provider.Args); i++ {
+		for j := 0; j < i; j++ {
+			if types.Identical(provider.Args[i].Type, provider.Args[j].Type) {
+				f := st.Field(j)
+				return nil, notePosition(fset.Position(f.Pos()), fmt.Errorf("provider struct has multiple fields of type %s", types.TypeString(provider.Args[j].Type, nil)))
+			}
+		}
+	}
+	return provider, nil
+}
+
+func allFields(call *ast.CallExpr) bool {
+	if len(call.Args) != 2 {
+		return false
+	}
+	b, ok := call.Args[1].(*ast.BasicLit)
+	if !ok {
+		return false
+	}
+	return strings.EqualFold(strconv.Quote("*"), b.Value)
 }
 
 // processBind creates an interface binding from a wire.Bind call.
