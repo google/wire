@@ -49,5 +49,5 @@ func injectDuplicateValues() Foo {
 
 func injectDuplicateInterface() Bar {
 	// fail: provideBar and wire.Bind both provide Bar.
-	panic(wire.Build(provideBar, wire.Bind(new(Bar), strings.NewReader("hello"))))
+	panic(wire.Build(provideBar, wire.Bind(new(Bar), new(*strings.Reader))))
 }

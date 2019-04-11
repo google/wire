@@ -85,6 +85,8 @@ func (p *providerSetSrc) trace(fset *token.FileSet, typ types.Type) []string {
 	return retval
 }
 
+var bindToUsePointer bool
+
 // A ProviderSet describes a set of providers.  The zero value is an empty
 // ProviderSet.
 type ProviderSet struct {
@@ -337,7 +339,7 @@ func Load(ctx context.Context, wd string, env []string, patterns []string) (*Inf
 }
 
 // load typechecks the packages that match the given patterns and
-// includes source for all transitive dependencies.  The patterns are
+// includes source for all transitive dependencies. The patterns are
 // defined by the underlying build system. For the go tool, this is
 // described at https://golang.org/cmd/go/#hdr-Package_lists_and_patterns
 //
@@ -372,7 +374,39 @@ func load(ctx context.Context, wd string, env []string, patterns []string) ([]*p
 	if len(errs) > 0 {
 		return nil, errs
 	}
+	// Look for and examine the imported wire library.
+LOOP:
+	for _, pkg := range pkgs {
+		for path, p := range pkg.Imports {
+			if isWireImport(path) {
+				loadWireLib(p)
+				break LOOP
+			}
+		}
+	}
 	return pkgs, nil
+}
+
+// loadWireLib checks the wire library version to decide the set of behavior of
+// the generator.
+func loadWireLib(pkg *packages.Package) {
+	for _, f := range pkg.Syntax {
+		for _, d := range f.Decls {
+			if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.CONST {
+				for _, s := range g.Specs {
+					if s, ok := s.(*ast.ValueSpec); ok {
+						for i, n := range s.Names {
+							if n.Name == "bindToUsePointer" {
+								if v, ok := s.Values[i].(*ast.Ident); ok {
+									bindToUsePointer = v.Name == "true"
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 // Info holds the result of Load.
@@ -860,25 +894,44 @@ func processBind(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*If
 	// Assumes that call.Fun is wire.Bind.
 
 	if len(call.Args) != 2 {
-		return nil, notePosition(fset.Position(call.Pos()), errors.New("call to Bind takes exactly two arguments"))
+		return nil, notePosition(fset.Position(call.Pos()),
+			errors.New("call to Bind takes exactly two arguments"))
 	}
 	// TODO(light): Verify that arguments are simple expressions.
 	ifaceArgType := info.TypeOf(call.Args[0])
 	ifacePtr, ok := ifaceArgType.(*types.Pointer)
 	if !ok {
-		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("first argument to Bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf("first argument to Bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
 	}
 	iface := ifacePtr.Elem()
 	methodSet, ok := iface.Underlying().(*types.Interface)
 	if !ok {
-		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("first argument to Bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf("first argument to Bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
 	}
+
 	provided := info.TypeOf(call.Args[1])
+	if bindToUsePointer {
+		providedPtr, ok := provided.(*types.Pointer)
+		if !ok {
+			return nil, notePosition(fset.Position(call.Args[0].Pos()),
+				fmt.Errorf("second argument to Bind must be a pointer or a pointer to a pointer; found %s", types.TypeString(provided, nil)))
+		}
+		provided = providedPtr.Elem()
+	} else {
+		fmt.Fprintf(os.Stderr,
+			"Deprecated: %v, see https://godoc.org/github.com/google/wire#Bind for more information.\n",
+			notePosition(fset.Position(call.Args[1].Pos()),
+				fmt.Errorf("using literal %s to provide a binding, use a pointer instead", provided)))
+	}
 	if types.Identical(iface, provided) {
-		return nil, notePosition(fset.Position(call.Pos()), errors.New("cannot bind interface to itself"))
+		return nil, notePosition(fset.Position(call.Pos()),
+			errors.New("cannot bind interface to itself"))
 	}
 	if !types.Implements(provided, methodSet) {
-		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("%s does not implement %s", types.TypeString(provided, nil), types.TypeString(iface, nil)))
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf("%s does not implement %s", types.TypeString(provided, nil), types.TypeString(iface, nil)))
 	}
 	return &IfaceBinding{
 		Pos:      call.Pos(),

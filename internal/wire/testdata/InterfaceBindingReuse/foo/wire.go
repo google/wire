@@ -24,7 +24,7 @@ func injectFooBar() FooBar {
 	wire.Build(
 		provideBar,
 		provideFooBar,
-		wire.Bind((*Fooer)(nil), (*Bar)(nil)),
+		wire.Bind(new(Fooer), new(*Bar)),
 	)
 	return FooBar{}
 }

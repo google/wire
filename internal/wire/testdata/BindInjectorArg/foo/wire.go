@@ -20,11 +20,10 @@ import (
 	"github.com/google/wire"
 )
 
-func inject(foo *Foo) *Bar {
-	// Currently fails because wire.Bind can't see injector args (#547).
+func inject(foo Foo) *Bar {
 	wire.Build(
 		NewBar,
-		wire.Bind(new(Fooer), &Foo{}),
+		wire.Bind(new(Fooer), new(Foo)),
 	)
 	return nil
 }

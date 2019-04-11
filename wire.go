@@ -93,9 +93,9 @@ func Build(...interface{}) string {
 // A Binding maps an interface to a concrete type.
 type Binding struct{}
 
-// Bind declares that a concrete type should be used to satisfy a
-// dependency on the type of iface, which must be a pointer to an
-// interface type.
+// Bind declares that a concrete type should be used to satisfy a dependency on
+// the type of iface. iface must be a pointer to an interface type, to must be a
+// pointer to a concrete type.
 //
 // Example:
 //
@@ -108,11 +108,14 @@ type Binding struct{}
 //	func (MyFoo) Foo() {}
 //
 //	var MySet = wire.NewSet(
-//		MyFoo{},
+//		wire.Struct(new(MyFoo))
 //		wire.Bind(new(Fooer), new(MyFoo)))
 func Bind(iface, to interface{}) Binding {
 	return Binding{}
 }
+
+// A const tells the wire command that Bind should take a pointer type.
+const bindToUsePointer = true
 
 // A ProvidedValue is an expression that is copied to the generated injector.
 type ProvidedValue struct{}

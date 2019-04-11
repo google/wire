@@ -44,6 +44,6 @@ var (
 	// From the user guide:
 	// Any set that includes an interface binding must also have a provider in
 	// the same set that provides the concrete type.
-	setB = wire.NewSet(wire.Bind(new(fooer), new(foo)))
+	setB = wire.NewSet(wire.Bind(new(fooer), new(*foo)))
 	setC = wire.NewSet(setA, setB)
 )

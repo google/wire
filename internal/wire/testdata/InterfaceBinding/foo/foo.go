@@ -42,4 +42,4 @@ func provideBar() *Bar {
 
 var Set = wire.NewSet(
 	provideBar,
-	wire.Bind((*Fooer)(nil), (*Bar)(nil)))
+	wire.Bind(new(Fooer), new(*Bar)))

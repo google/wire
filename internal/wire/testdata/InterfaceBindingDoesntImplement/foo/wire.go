@@ -22,6 +22,6 @@ import (
 
 func injectFooer() Fooer {
 	// wrong: string doesn't implement Fooer.
-	wire.Build(wire.Bind((*Fooer)(nil), "foo"))
+	wire.Build(wire.Bind(new(Fooer), new(string)))
 	return nil
 }
