@@ -85,8 +85,6 @@ func (p *providerSetSrc) trace(fset *token.FileSet, typ types.Type) []string {
 	return retval
 }
 
-var bindToUsePointer bool
-
 // A ProviderSet describes a set of providers.  The zero value is an empty
 // ProviderSet.
 type ProviderSet struct {
