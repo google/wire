@@ -114,7 +114,8 @@ func Bind(iface, to interface{}) Binding {
 	return Binding{}
 }
 
-// A const tells the wire command that Bind should take a pointer type.
+// bindToUsePointer is detected by the wire tool to indicate that Bind's second argument should take a pointer.
+// See https://github.com/google/wire/issues/120 for details.
 const bindToUsePointer = true
 
 // A ProvidedValue is an expression that is copied to the generated injector.
