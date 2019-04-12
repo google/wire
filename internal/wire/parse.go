@@ -374,39 +374,7 @@ func load(ctx context.Context, wd string, env []string, patterns []string) ([]*p
 	if len(errs) > 0 {
 		return nil, errs
 	}
-	// Look for and examine the imported wire library.
-LOOP:
-	for _, pkg := range pkgs {
-		for path, p := range pkg.Imports {
-			if isWireImport(path) {
-				loadWireLib(p)
-				break LOOP
-			}
-		}
-	}
 	return pkgs, nil
-}
-
-// loadWireLib checks the wire library version to decide the set of behavior of
-// the generator.
-func loadWireLib(pkg *packages.Package) {
-	for _, f := range pkg.Syntax {
-		for _, d := range f.Decls {
-			if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.CONST {
-				for _, s := range g.Specs {
-					if s, ok := s.(*ast.ValueSpec); ok {
-						for i, n := range s.Names {
-							if n.Name == "bindToUsePointer" {
-								if v, ok := s.Values[i].(*ast.Ident); ok {
-									bindToUsePointer = v.Name == "true"
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
 }
 
 // Info holds the result of Load.
@@ -912,18 +880,13 @@ func processBind(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*If
 	}
 
 	provided := info.TypeOf(call.Args[1])
-	if bindToUsePointer {
+	if obj := loadWireLib(info, call).Scope().Lookup("bindToUsePointer"); obj != nil {
 		providedPtr, ok := provided.(*types.Pointer)
 		if !ok {
 			return nil, notePosition(fset.Position(call.Args[0].Pos()),
 				fmt.Errorf("second argument to Bind must be a pointer or a pointer to a pointer; found %s", types.TypeString(provided, nil)))
 		}
 		provided = providedPtr.Elem()
-	} else {
-		fmt.Fprintf(os.Stderr,
-			"Deprecated: %v, see https://godoc.org/github.com/google/wire#Bind for more information.\n",
-			notePosition(fset.Position(call.Args[1].Pos()),
-				fmt.Errorf("using literal %s to provide a binding, use a pointer instead", provided)))
 	}
 	if types.Identical(iface, provided) {
 		return nil, notePosition(fset.Position(call.Pos()),
@@ -1237,4 +1200,22 @@ func (pt ProvidedType) Field() *Field {
 		panic("ProvidedType does not hold a Field")
 	}
 	return pt.f
+}
+
+// loadWireLib loads the wire package the user is importing from their injector.
+// The call is a wire marker function call.
+func loadWireLib(info *types.Info, call *ast.CallExpr) *types.Package {
+	fun, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return nil
+	}
+	pkgName, ok := fun.X.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+	wireName, ok := info.ObjectOf(pkgName).(*types.PkgName)
+	if !ok {
+		return nil
+	}
+	return wireName.Imported()
 }
