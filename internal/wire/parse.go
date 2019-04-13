@@ -878,7 +878,7 @@ func processBind(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*If
 	}
 
 	provided := info.TypeOf(call.Args[1])
-	if obj := loadWireLib(info, call).Scope().Lookup("bindToUsePointer"); obj != nil {
+	if bindShouldUsePointer(info, call) {
 		providedPtr, ok := provided.(*types.Pointer)
 		if !ok {
 			return nil, notePosition(fset.Position(call.Args[0].Pos()),
@@ -1200,20 +1200,12 @@ func (pt ProvidedType) Field() *Field {
 	return pt.f
 }
 
-// loadWireLib loads the wire package the user is importing from their injector.
-// The call is a wire marker function call.
-func loadWireLib(info *types.Info, call *ast.CallExpr) *types.Package {
-	fun, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok {
-		return nil
-	}
-	pkgName, ok := fun.X.(*ast.Ident)
-	if !ok {
-		return nil
-	}
-	wireName, ok := info.ObjectOf(pkgName).(*types.PkgName)
-	if !ok {
-		return nil
-	}
-	return wireName.Imported()
+// bindShouldUsePointer loads the wire package the user is importing from their
+// injector. The call is a wire marker function call.
+func bindShouldUsePointer(info *types.Info, call *ast.CallExpr) bool {
+	// These type assertions should not fail, otherwise panic.
+	fun := call.Fun.(*ast.SelectorExpr)                 // wire.Bind
+	pkgName := fun.X.(*ast.Ident)                       // wire
+	wireName := info.ObjectOf(pkgName).(*types.PkgName) // wire package
+	return wireName.Imported().Scope().Lookup("bindToUsePointer") != nil
 }
