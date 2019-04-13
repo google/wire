@@ -337,7 +337,7 @@ func Load(ctx context.Context, wd string, env []string, patterns []string) (*Inf
 }
 
 // load typechecks the packages that match the given patterns and
-// includes source for all transitive dependencies.  The patterns are
+// includes source for all transitive dependencies. The patterns are
 // defined by the underlying build system. For the go tool, this is
 // described at https://golang.org/cmd/go/#hdr-Package_lists_and_patterns
 //
@@ -860,25 +860,39 @@ func processBind(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*If
 	// Assumes that call.Fun is wire.Bind.
 
 	if len(call.Args) != 2 {
-		return nil, notePosition(fset.Position(call.Pos()), errors.New("call to Bind takes exactly two arguments"))
+		return nil, notePosition(fset.Position(call.Pos()),
+			errors.New("call to Bind takes exactly two arguments"))
 	}
 	// TODO(light): Verify that arguments are simple expressions.
 	ifaceArgType := info.TypeOf(call.Args[0])
 	ifacePtr, ok := ifaceArgType.(*types.Pointer)
 	if !ok {
-		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("first argument to Bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf("first argument to Bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
 	}
 	iface := ifacePtr.Elem()
 	methodSet, ok := iface.Underlying().(*types.Interface)
 	if !ok {
-		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("first argument to Bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf("first argument to Bind must be a pointer to an interface type; found %s", types.TypeString(ifaceArgType, nil)))
 	}
+
 	provided := info.TypeOf(call.Args[1])
+	if bindShouldUsePointer(info, call) {
+		providedPtr, ok := provided.(*types.Pointer)
+		if !ok {
+			return nil, notePosition(fset.Position(call.Args[0].Pos()),
+				fmt.Errorf("second argument to Bind must be a pointer or a pointer to a pointer; found %s", types.TypeString(provided, nil)))
+		}
+		provided = providedPtr.Elem()
+	}
 	if types.Identical(iface, provided) {
-		return nil, notePosition(fset.Position(call.Pos()), errors.New("cannot bind interface to itself"))
+		return nil, notePosition(fset.Position(call.Pos()),
+			errors.New("cannot bind interface to itself"))
 	}
 	if !types.Implements(provided, methodSet) {
-		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("%s does not implement %s", types.TypeString(provided, nil), types.TypeString(iface, nil)))
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf("%s does not implement %s", types.TypeString(provided, nil), types.TypeString(iface, nil)))
 	}
 	return &IfaceBinding{
 		Pos:      call.Pos(),
@@ -1184,4 +1198,14 @@ func (pt ProvidedType) Field() *Field {
 		panic("ProvidedType does not hold a Field")
 	}
 	return pt.f
+}
+
+// bindShouldUsePointer loads the wire package the user is importing from their
+// injector. The call is a wire marker function call.
+func bindShouldUsePointer(info *types.Info, call *ast.CallExpr) bool {
+	// These type assertions should not fail, otherwise panic.
+	fun := call.Fun.(*ast.SelectorExpr)                 // wire.Bind
+	pkgName := fun.X.(*ast.Ident)                       // wire
+	wireName := info.ObjectOf(pkgName).(*types.PkgName) // wire package
+	return wireName.Imported().Scope().Lookup("bindToUsePointer") != nil
 }

@@ -1,4 +1,4 @@
-// Copyright 2018 The Wire Authors
+// Copyright 2019 The Wire Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,32 +11,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+//+build wireinject
 
 package main
 
 import (
-	"fmt"
-
-	"example.com/foo"
 	"github.com/google/wire"
 )
 
-func main() {
-	fmt.Println(injectFooer().Foo())
+func inject(foo *Foo) *Bar {
+	wire.Build(
+		NewBar,
+		wire.Bind(new(Fooer), new(*Foo)),
+	)
+	return nil
 }
-
-type Bar string
-
-func (b *Bar) Foo() string {
-	return string(*b)
-}
-
-func provideBar() *Bar {
-	b := new(Bar)
-	*b = "Hello, World!"
-	return b
-}
-
-var Set = wire.NewSet(
-	provideBar,
-	wire.Bind(new(foo.Fooer), new(*Bar)))

@@ -19,7 +19,7 @@ import (
 )
 
 func main() {
-	fmt.Println(inject(&Foo{"hello"}).Name)
+	fmt.Println(inject(Foo{"hello"}).Name)
 }
 
 type Fooer interface {
@@ -30,7 +30,7 @@ type Foo struct {
 	f string
 }
 
-func (f *Foo) Foo() string {
+func (f Foo) Foo() string {
 	return f.f
 }
 

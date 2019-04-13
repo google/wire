@@ -1,4 +1,4 @@
-// Copyright 2018 The Wire Authors
+// Copyright 2019 The Wire Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,27 +16,28 @@ package main
 
 import (
 	"fmt"
-
-	"example.com/foo"
-	"github.com/google/wire"
 )
 
 func main() {
-	fmt.Println(injectFooer().Foo())
+	fmt.Println(inject(&Foo{"hello"}).Name)
 }
 
-type Bar string
-
-func (b *Bar) Foo() string {
-	return string(*b)
+type Fooer interface {
+	Foo() string
 }
 
-func provideBar() *Bar {
-	b := new(Bar)
-	*b = "Hello, World!"
-	return b
+type Foo struct {
+	f string
 }
 
-var Set = wire.NewSet(
-	provideBar,
-	wire.Bind(new(foo.Fooer), new(*Bar)))
+func (f *Foo) Foo() string {
+	return f.f
+}
+
+type Bar struct {
+	Name string
+}
+
+func NewBar(fooer Fooer) *Bar {
+	return &Bar{Name: fooer.Foo()}
+}

@@ -26,7 +26,7 @@ import (
 func inject() io.Writer {
 	wire.Build(
 		wire.Value(os.Stdout),
-		wire.Bind(new(io.Writer), new(os.File)),
+		wire.Bind(new(io.Writer), new(*os.File)),
 	)
 	return nil
 }

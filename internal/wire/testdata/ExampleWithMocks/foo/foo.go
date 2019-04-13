@@ -75,7 +75,7 @@ var mockAppSet = wire.NewSet(
 	// For each mocked dependency, add a provider and use wire.Bind to bind
 	// the concrete type to the relevant interface.
 	newMockTimer,
-	wire.Bind(new(timer), new(mockTimer)),
+	wire.Bind(new(timer), new(*mockTimer)),
 )
 
 type timer interface {

@@ -22,6 +22,6 @@ import (
 
 func injectFooer() Fooer {
 	// wrong: wire.Bind requires 2 args.
-	wire.Build(wire.Bind((*Fooer)(nil)))
+	wire.Build(wire.Bind(new(Fooer)))
 	return nil
 }
