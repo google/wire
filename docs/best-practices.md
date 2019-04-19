@@ -29,7 +29,7 @@ func NewGreeter(ctx context.Context, opts *Options) (*Greeter, error) {
     // ...
 }
 
-var GreeterSet = wire.NewSet(Options{}, NewGreeter)
+var GreeterSet = wire.NewSet(wire.Struct(new(Options), "*"), NewGreeter)
 ```
 
 ## Provider Sets in Libraries
@@ -117,5 +117,5 @@ include the mocked types.
 
 Create a new struct that includes the app plus all of the dependencies you want
 to mock. Create a test-only injector that returns this struct, give it providers
-for the concrete mock types, and use `wire.Bind` to tell Wire that the
-concrete mock types should be used to fulfill the appropriate interface.
+for the concrete mock types, and use `wire.Bind` to tell Wire that the concrete
+mock types should be used to fulfill the appropriate interface.
