@@ -223,8 +223,8 @@ var Set = wire.NewSet(
     provideBar)
 ```
 
-The first argument to `wire.Bind` is a pointer to the desired interface type and
-the second argument is a pointer to the concrete type, or a pointer to a pointer
+The first argument to `wire.Bind` is a pointer to a value of the desired interface type and
+the second argument is a pointer to a value of the type that implements the interface.
 to the concrete type, such as in this case, we want wire to bind the interface
 to the pointer type. Any set that includes an interface binding must also have a
 provider in the same set that provides the concrete type.
@@ -235,8 +235,8 @@ provider in the same set that provides the concrete type.
 ### Struct Providers
 
 Structs can also be marked as providers. Use the `wire.Struct` function to
-inject a struct type and tells the injector which field(s) should be injected,
-an injector will fill in each field using the corresponding provider. For a
+inject a struct type and tell the injector which field(s) should be injected.
+The injector will fill in each field using the provider for the field's type. For a
 given struct type `S`, this would provide both `S` and `*S`. For example, given
 the following providers:
 
@@ -256,7 +256,7 @@ type FooBar struct {
 var Set = wire.NewSet(
     ProvideFoo,
     ProvideBar,
-    wire.Struct(new(FooBar), "*"))
+    wire.Struct(new(FooBar), "Foo", "Bar"))
 ```
 
 A generated injector for `FooBar` would look like this:
@@ -274,7 +274,7 @@ func injectFooBar() FooBar {
 ```
 
 The first argument to `wire.Struct` is a pointer to the desired struct type and
-the rest arguments are strings whose values are the names of the desired values
+the subsequent arguments are the names of fields to be injected.
 to be injected. Use the special string `"*"` as a shortcut to tell the injector
 to inject all fields. For the above example, you can specify only injecting
 `"Foo"` by changing the `Set` to:
