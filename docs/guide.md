@@ -219,63 +219,43 @@ func provideBar(f Fooer) string {
 
 var Set = wire.NewSet(
     provideMyFooer,
-    wire.Bind((*Fooer)(nil), (*MyFooer)(nil)),
+    wire.Bind(new(Fooer), new(*MyFooer)),
     provideBar)
 ```
 
 The first argument to `wire.Bind` is a pointer to a value of the desired
-interface type and the second argument is a zero value of the concrete type. Any
-set that includes an interface binding must also have a provider in the same set
-that provides the concrete type.
-
-If necessary, you can also bind one interface to another:
-
-```go
-type FooerPlus interface {
-  Fooer
-  Bar() String
-}
-
-func ProvideFooerPlus() FooerPlus {
-  ...
-}
-
-var FooerPlusAsFooer = wire.NewSet(
-  ProvideFooerPlus,
-  wire.Bind(new(Fooer), *new(FooerPlus)))
-```
+interface type and the second argument is a pointer to a value of the type that
+implements the interface. Any set that includes an interface binding must also
+have a provider in the same set that provides the concrete type.
 
 [type identity]: https://golang.org/ref/spec#Type_identity
 [return concrete types]: https://github.com/golang/go/wiki/CodeReviewComments#interfaces
 
 ### Struct Providers
 
-Structs can also be marked as providers. Instead of calling a function, an
-injector will fill in each field using the corresponding provider. For a given
-struct type `S`, this would provide both `S` and `*S`. For example, given the
-following providers:
+Structs can also be marked as providers. Use the `wire.Struct` function to
+inject a struct type and tell the injector which field(s) should be injected.
+The injector will fill in each field using the provider for the field's type.
+For a given struct type `S`, this would provide both `S` and `*S`. For example,
+given the following providers:
 
 ```go
 type Foo int
 type Bar int
 
-func ProvideFoo() Foo {
-    // ...
-}
+func ProvideFoo() Foo {/* ... */}
 
-func ProvideBar() Bar {
-    // ...
-}
+func ProvideBar() Bar {/* ... */}
 
 type FooBar struct {
-    Foo Foo
-    Bar Bar
+    MyFoo Foo
+    MyBar Bar
 }
 
 var Set = wire.NewSet(
     ProvideFoo,
     ProvideBar,
-    FooBar{})
+    wire.Struct(new(FooBar), "MyFoo", "MyBar"))
 ```
 
 A generated injector for `FooBar` would look like this:
@@ -285,8 +265,34 @@ func injectFooBar() FooBar {
     foo := ProvideFoo()
     bar := ProvideBar()
     fooBar := FooBar{
-        Foo: foo,
-        Bar: bar,
+        MyFoo: foo,
+        MyBar: bar,
+    }
+    return fooBar
+}
+```
+
+The first argument to `wire.Struct` is a pointer to the desired struct type and
+the subsequent arguments are the names of fields to be injected. A special
+string `"*"` can be used as a shortcut to tell the injector to inject all
+fields. So `wire.Struct(new(FooBar), "*")` produces the same result as above.
+
+For the above example, you can specify only injecting `"MyFoo"` by changing the
+`Set` to:
+
+```go
+var Set = wire.NewSet(
+    ProvideFoo,
+    wire.Struct(new(FooBar), "MyFoo"))
+```
+
+Then the generated injector for `FooBar` would look like this:
+
+```go
+func injectFooBar() FooBar {
+    foo := ProvideFoo()
+    fooBar := FooBar{
+        MyFoo: foo,
     }
     return fooBar
 }
