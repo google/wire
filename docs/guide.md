@@ -249,14 +249,14 @@ func ProvideFoo() Foo {/* ... */}
 func ProvideBar() Bar {/* ... */}
 
 type FooBar struct {
-    Foo Foo
-    Bar Bar
+    MyFoo Foo
+    MyBar Bar
 }
 
 var Set = wire.NewSet(
     ProvideFoo,
     ProvideBar,
-    wire.Struct(new(FooBar), "Foo", "Bar"))
+    wire.Struct(new(FooBar), "MyFoo", "MyBar"))
 ```
 
 A generated injector for `FooBar` would look like this:
