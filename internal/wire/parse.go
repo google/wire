@@ -753,9 +753,10 @@ func processStructLiteralProvider(fset *token.FileSet, typeName *types.TypeName)
 
 	pos := typeName.Pos()
 	fmt.Fprintf(os.Stderr,
-		"Deprecated: %v, see https://godoc.org/github.com/google/wire#Struct for more information.\n",
+		"Warning: %v, see https://godoc.org/github.com/google/wire#Struct for more information.\n",
 		notePosition(fset.Position(pos),
-			fmt.Errorf("using struct literal to inject %s, use wire.Struct instead", typeName.Type())))
+			fmt.Errorf("using struct literal to inject %s is deprecated and will be removed in the next release; use wire.Struct instead",
+				typeName.Type())))
 	provider := &Provider{
 		Pkg:      typeName.Pkg(),
 		Name:     typeName.Name(),
