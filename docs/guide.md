@@ -275,7 +275,7 @@ func injectFooBar() FooBar {
 
 The first argument to `wire.Struct` is a pointer to the desired struct type and
 the subsequent arguments are the names of fields to be injected.
-to be injected. Use the special string `"*"` as a shortcut to tell the injector
+Use the special string `"*"` as a shortcut to tell the injector
 to inject all fields. For the above example, you can specify only injecting
 `"Foo"` by changing the `Set` to:
 
