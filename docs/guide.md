@@ -344,6 +344,39 @@ func injectReader() io.Reader {
 }
 ```
 
+### Use Fields of a Struct as Providers
+
+Sometimes the providers the user wants are some fields of a struct. Instead of
+writing "extraction" helper functions to provide each individual field, `wire`
+offers a shortcut, `FieldsOf`, to use those fields directly.
+
+```go
+type Foo struct {
+    S string
+}
+
+func provideFoo() Foo {
+    return Foo{S: "Hello, World!"}
+}
+
+func injectedMessage() string {
+    wire.Build(
+        provideFoo,
+        wire.FieldsOf(new(Foo), "S"))
+    return ""
+}
+```
+
+The generated injector would look like this:
+
+```go
+func injectedMessage() string {
+    foo := provideFoo()
+    string2 := foo.S
+    return string2
+}
+```
+
 ### Cleanup functions
 
 If a provider creates a value that needs to be cleaned up (e.g. closing a file),
