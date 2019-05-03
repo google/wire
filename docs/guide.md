@@ -353,10 +353,12 @@ offers a shortcut, `FieldsOf`, to use those fields directly.
 ```go
 type Foo struct {
     S string
+    N int
+    F float64
 }
 
 func provideFoo() Foo {
-    return Foo{S: "Hello, World!"}
+    return Foo{ S: "Hello, World!", N: 1, F: 3.14 }
 }
 
 func injectedMessage() string {
@@ -376,6 +378,18 @@ func injectedMessage() string {
     return string2
 }
 ```
+
+The type `Foo` can be a group that centralized a bunch of fields.
+`wire.FieldsOf` here save the need of writing helper functions such as:
+
+```go
+func getS(foo Foo) string {
+    return foo.S
+}
+```
+
+If other fields should be used by the injector, you can append their names in
+the `wire.FieldsOf` function.
 
 ### Cleanup functions
 
