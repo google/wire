@@ -12,45 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//+build wireinject
+
 package main
 
 import (
-	"fmt"
-	"sync"
-
 	"github.com/google/wire"
 )
 
-func main() {
-	fb := injectFooBar()
-	pfb := injectPartFooBar()
-	fmt.Println(fb.Foo, fb.Bar)
-	fmt.Println(pfb.Foo, pfb.Bar)
+func injectPartFooBar() FooBar {
+	wire.Build(ProhibitSet)
+	return FooBar{}
 }
-
-type Foo int
-type Bar int
-
-type FooBar struct {
-	mu  sync.Mutex `wire:"-"`
-	Foo Foo
-	Bar Bar
-}
-
-func provideFoo() Foo {
-	return 41
-}
-
-func provideBar() Bar {
-	return 1
-}
-
-var Set = wire.NewSet(
-	wire.Struct(new(FooBar), "*"),
-	provideFoo,
-	provideBar)
-
-var PartSet = wire.NewSet(
-	wire.Struct(new(FooBar), "Foo"),
-	provideFoo,
-)

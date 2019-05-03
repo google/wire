@@ -813,13 +813,16 @@ func processStructProvider(fset *token.FileSet, info *types.Info, call *ast.Call
 		Out:      []types.Type{structPtr.Elem(), structPtr},
 	}
 	if allFields(call) {
-		provider.Args = make([]ProviderInput, st.NumFields())
+		provider.Args = make([]ProviderInput, 0)
 		for i := 0; i < st.NumFields(); i++ {
+			if isPrevented(st, i) {
+				continue
+			}
 			f := st.Field(i)
-			provider.Args[i] = ProviderInput{
+			provider.Args = append(provider.Args, ProviderInput{
 				Type:      f.Type(),
 				FieldName: f.Name(),
-			}
+			})
 		}
 	} else {
 		provider.Args = make([]ProviderInput, len(call.Args)-1)
@@ -854,6 +857,13 @@ func allFields(call *ast.CallExpr) bool {
 		return false
 	}
 	return strings.EqualFold(strconv.Quote("*"), b.Value)
+}
+
+// isPrevented checks whether field i is prevented by tag "-".
+// Since this is the only tag used by wire, we can do string comparison
+// without using reflect.
+func isPrevented(st *types.Struct, i int) bool {
+	return strings.Contains(st.Tag(i), `wire:"-"`)
 }
 
 // processBind creates an interface binding from a wire.Bind call.
@@ -1037,6 +1047,9 @@ func checkField(f ast.Expr, st *types.Struct) (*types.Var, error) {
 	}
 	for i := 0; i < st.NumFields(); i++ {
 		if strings.EqualFold(strconv.Quote(st.Field(i).Name()), b.Value) {
+			if isPrevented(st, i) {
+				return nil, fmt.Errorf("%s is prevented from injecting by wire", b.Value)
+			}
 			return st.Field(i), nil
 		}
 	}

@@ -22,35 +22,27 @@ import (
 )
 
 func main() {
-	fb := injectFooBar()
 	pfb := injectPartFooBar()
-	fmt.Println(fb.Foo, fb.Bar)
-	fmt.Println(pfb.Foo, pfb.Bar)
+	fmt.Println(pfb.Foo)
 }
 
 type Foo int
-type Bar int
 
 type FooBar struct {
 	mu  sync.Mutex `wire:"-"`
 	Foo Foo
-	Bar Bar
 }
 
 func provideFoo() Foo {
-	return 41
+	return 42
 }
 
-func provideBar() Bar {
-	return 1
+func provideMutex() sync.Mutex {
+	return sync.Mutex{}
 }
 
-var Set = wire.NewSet(
-	wire.Struct(new(FooBar), "*"),
-	provideFoo,
-	provideBar)
-
-var PartSet = wire.NewSet(
-	wire.Struct(new(FooBar), "Foo"),
+var ProhibitSet = wire.NewSet(
+	wire.Struct(new(FooBar), "mu", "Foo"),
+	provideMutex,
 	provideFoo,
 )
