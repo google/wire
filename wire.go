@@ -36,9 +36,9 @@ type ProviderSet struct{}
 // Passing a function value to NewSet declares that the function's first
 // return value type will be provided by calling the function. The arguments
 // to the function will come from the providers for their types. As such, all
-// the parameters must be of non-identical types. The function may optionally
-// return an error as its last return value and a cleanup function as the
-// second return value. A cleanup function must be of type func() and is
+// the function's parameters must be of non-identical types. The function may
+// optionally return an error as its last return value and a cleanup function
+// as the second return value. A cleanup function must be of type func() and is
 // guaranteed to be called before the cleanup function of any of the
 // provider's inputs. If any provider returns an error, the injector function
 // will call all the appropriate cleanup functions and return the error from
