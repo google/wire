@@ -1,3 +1,4 @@
+github.com/google/subcommands
 github.com/google/wire
 github.com/pmezard/go-difflib
 golang.org/x/tools
