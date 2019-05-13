@@ -14,32 +14,67 @@
 # limitations under the License.
 
 # https://coderwall.com/p/fkfaqq/safer-bash-scripts-with-set-euxo-pipefail
-set -euxo pipefail
+set -euo pipefail
 
 if [[ $# -gt 0 ]]; then
   echo "usage: runtests.sh" 1>&2
   exit 64
 fi
 
-result=0
-
 # Run Go tests. Only do coverage for the Linux build
 # because it is slow, and codecov will only save the last one anyway.
-if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-  go test -race -coverpkg=./... -coverprofile=coverage.out ./... || result=1
-  if [ -f coverage.out ]; then
+result=0
+if [[ "${TRAVIS_OS_NAME:-}" == "linux" ]]; then
+  echo "Running Go tests (with coverage)..."
+  go test -mod=readonly -race -coverpkg=./... -coverprofile=coverage.out ./... || result=1
+  if [ -f coverage.out ] && [ $result -eq 0 ]; then
     bash <(curl -s https://codecov.io/bash)
   fi
-  # Ensure that the code has no extra dependencies (including transitive
-  # dependencies) that we're not already aware of by comparing with
-  # ./internal/alldeps
-  #
-  # Whenever project dependencies change, rerun ./internal/listdeps.sh
-  ./internal/listdeps.sh | diff ./internal/alldeps - || {
-    echo "FAIL: dependencies changed; compare listdeps.sh output with alldeps" && result=1
-  }
 else
-  go test -race ./... || result=1
+  echo "Running Go tests..."
+  go test -mod=readonly -race ./... || result=1
+fi
+
+# No need to run other checks on OSs other than linux.
+# We default TRAVIS_OS_NAME to "linux" so that we don't abort here when run locally.
+if [[ "${TRAVIS_OS_NAME:-linux}" != "linux" ]]; then
+  exit $result
+fi
+
+echo
+echo "Ensuring .go files are formatted with gofmt -s..."
+DIFF=$(gofmt -s -d `find . -name '*.go' -type f | grep -v testdata`)
+if [ -n "$DIFF" ]; then
+  echo "FAIL: please run gofmt -s and commit the result"
+  echo "$DIFF";
+  result=1;
+else
+  echo "OK"
+fi;
+
+
+# Ensure that the code has no extra dependencies (including transitive
+# dependencies) that we're not already aware of by comparing with
+# ./internal/alldeps
+#
+# Whenever project dependencies change, rerun ./internal/listdeps.sh
+if [[ $(go version) == *1\.12* ]]; then
+  echo
+  echo "Ensuring that there are no dependencies not listed in ./internal/alldeps..."
+  ./internal/listdeps.sh | diff ./internal/alldeps - && echo "OK" || {
+    echo "FAIL: dependencies changed; run: internal/listdeps.sh > internal/alldeps"
+    # Module behavior may differ across versions.
+    echo "using go version 1.12."
+    result=1
+  }
+fi
+
+
+# For pull requests, check if there are undeclared incompatible API changes.
+# Skip this if we're already going to fail since it is expensive.
+if [[ ${result} -eq 0 ]] && [[ ! -z "${TRAVIS_BRANCH:-x}" ]] && [[ ! -z "${TRAVIS_PULL_REQUEST_SHA:-x}" ]]; then
+  echo
+  ./internal/check_api_change.sh || result=1;
 fi
 
 exit $result
