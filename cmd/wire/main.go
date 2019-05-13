@@ -87,7 +87,7 @@ type genCmd struct{}
 
 func (*genCmd) Name() string { return "gen" }
 func (*genCmd) Synopsis() string {
-	return "generates the wire_gen.go file for each package"
+	return "generate the wire_gen.go file for each package"
 }
 func (*genCmd) Usage() string {
 	return `gen [packages]
@@ -142,7 +142,7 @@ type diffCmd struct{}
 
 func (*diffCmd) Name() string { return "diff" }
 func (*diffCmd) Synopsis() string {
-	return "outputs a diff between existing wire_gen.go files and what gen would generate"
+	return "output a diff between existing wire_gen.go files and what gen would generate"
 }
 func (*diffCmd) Usage() string {
 	return `diff [packages]
@@ -218,7 +218,7 @@ type showCmd struct{}
 
 func (*showCmd) Name() string { return "show" }
 func (*showCmd) Synopsis() string {
-	return "describes all top-level provider sets"
+	return "describe all top-level provider sets"
 }
 func (*showCmd) Usage() string {
 	return `show [packages]
@@ -314,7 +314,7 @@ type checkCmd struct{}
 
 func (*checkCmd) Name() string { return "check" }
 func (*checkCmd) Synopsis() string {
-	return "prints any Wire errors found"
+	return "print any Wire errors found"
 }
 func (*checkCmd) Usage() string {
 	return `check [packages]
