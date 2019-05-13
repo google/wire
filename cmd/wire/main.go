@@ -83,7 +83,26 @@ func packages(f *flag.FlagSet) []string {
 	return pkgs
 }
 
-type genCmd struct{}
+// newGenerateOptions returns an initialized wire.GenerateOptions, possibly
+// with the Header option set.
+func newGenerateOptions(headerFile string) (*wire.GenerateOptions, error) {
+	opts := new(wire.GenerateOptions)
+	if headerFile != "" {
+		f, err := os.Open(headerFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open header file %q: %v", headerFile, err)
+		}
+		opts.Header, err = ioutil.ReadAll(f)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read header file %q: %v", headerFile, err)
+		}
+	}
+	return opts, nil
+}
+
+type genCmd struct {
+	headerFile string
+}
 
 func (*genCmd) Name() string { return "gen" }
 func (*genCmd) Synopsis() string {
@@ -97,14 +116,22 @@ func (*genCmd) Usage() string {
   If no packages are listed, it defaults to ".".
 `
 }
-func (*genCmd) SetFlags(_ *flag.FlagSet) {}
-func (*genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (cmd *genCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&cmd.headerFile, "header_file", "", "path to file to insert as a header in wire_gen.go")
+}
+
+func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Println("failed to get working directory: ", err)
 		return subcommands.ExitFailure
 	}
-	outs, errs := wire.Generate(ctx, wd, os.Environ(), packages(f))
+	opts, err := newGenerateOptions(cmd.headerFile)
+	if err != nil {
+		log.Println(err)
+		return subcommands.ExitFailure
+	}
+	outs, errs := wire.Generate(ctx, wd, os.Environ(), packages(f), opts)
 	if len(errs) > 0 {
 		logErrors(errs)
 		log.Println("generate failed")
@@ -138,7 +165,9 @@ func (*genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}
 	return subcommands.ExitSuccess
 }
 
-type diffCmd struct{}
+type diffCmd struct {
+	headerFile string
+}
 
 func (*diffCmd) Name() string { return "diff" }
 func (*diffCmd) Synopsis() string {
@@ -156,8 +185,10 @@ func (*diffCmd) Usage() string {
   plus an error if trouble.
 `
 }
-func (*diffCmd) SetFlags(_ *flag.FlagSet) {}
-func (*diffCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (cmd *diffCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&cmd.headerFile, "header_file", "", "path to file to insert as a header in wire_gen.go")
+}
+func (cmd *diffCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	const (
 		errReturn  = subcommands.ExitStatus(2)
 		diffReturn = subcommands.ExitStatus(1)
@@ -167,7 +198,12 @@ func (*diffCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		log.Println("failed to get working directory: ", err)
 		return errReturn
 	}
-	outs, errs := wire.Generate(ctx, wd, os.Environ(), packages(f))
+	opts, err := newGenerateOptions(cmd.headerFile)
+	if err != nil {
+		log.Println(err)
+		return subcommands.ExitFailure
+	}
+	outs, errs := wire.Generate(ctx, wd, os.Environ(), packages(f), opts)
 	if len(errs) > 0 {
 		logErrors(errs)
 		log.Println("generate failed")
