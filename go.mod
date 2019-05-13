@@ -2,6 +2,7 @@ module github.com/google/wire
 
 require (
 	github.com/google/go-cmp v0.2.0
+	github.com/google/subcommands v1.0.1
 	github.com/pmezard/go-difflib v1.0.0
 	golang.org/x/crypto v0.0.0-20190422183909-d864b10871cd // indirect
 	golang.org/x/net v0.0.0-20190420063019-afa5a82059c6 // indirect
