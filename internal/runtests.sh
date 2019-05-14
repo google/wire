@@ -58,7 +58,7 @@ fi;
 # ./internal/alldeps
 #
 # Whenever project dependencies change, rerun ./internal/listdeps.sh
-if [[ $(go version) == *1\.12* ]]; then
+if [[ $(go version) == *go1\.12* ]]; then
   echo
   echo "Ensuring that there are no dependencies not listed in ./internal/alldeps..."
   ./internal/listdeps.sh | diff ./internal/alldeps - && echo "OK" || {
