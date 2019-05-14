@@ -37,7 +37,7 @@ PKGINFO_BRANCH=$(mktemp)
 PKGINFO_MASTER=$(mktemp)
 
 function cleanup() {
-  rm -f "$INSTALL_DIR"
+  rm -rf "$INSTALL_DIR"
   rm -rf "$MASTER_CLONE_DIR"
   rm -f "$PKGINFO_BRANCH"
   rm -f "$PKGINFO_MASTER"
