@@ -47,6 +47,7 @@ trap cleanup EXIT
 # Move to a temporary directory while installing apidiff to avoid changing
 # the local .mod file.
 pushd /tmp &> /dev/null
+go mod init tmp
 go install golang.org/x/exp/cmd/apidiff
 popd &> /dev/null
 
