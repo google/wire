@@ -12,14 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-os:
-  - linux
-  - osx
-  - windows
-
 language: go
 go_import_path: github.com/google/wire
-go: "1.11.x"
 
 before_install:
   # The Bash that comes with OS X is ancient.
@@ -34,13 +28,8 @@ before_install:
 install:
   # Re-checkout files preserving line feeds. This prevents Windows builds from
   # converting \n to \r\n.
-  - if [[ "$TRAVIS_OS_NAME" == "windows" ]]; then
-      cd ../..;
-      mv $TRAVIS_REPO_SLUG _old;
-      git config --global core.autocrlf false;
-      git clone _old $TRAVIS_REPO_SLUG;
-      cd $TRAVIS_REPO_SLUG;
-    fi
+  - "git config --global core.autocrlf input"
+  - "git checkout -- ."
 
 script:
   - 'internal/runtests.sh'
@@ -48,3 +37,19 @@ script:
 env:
   global:
   - GO111MODULE=on
+  - GOPROXY=https://proxy.golang.org
+
+# When updating Go versions:
+# In addition to changing the "go:" versions below, edit the version
+# test in internal/runtests.sh.
+
+jobs:
+  include:
+    - go: "1.11.x"
+      os: linux
+    - go: "1.12.x"
+      os: linux
+    - go: "1.12.x"
+      os: osx
+    - go: "1.12.x"
+      os: windows
