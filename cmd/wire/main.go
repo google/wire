@@ -88,11 +88,8 @@ func packages(f *flag.FlagSet) []string {
 func newGenerateOptions(headerFile string) (*wire.GenerateOptions, error) {
 	opts := new(wire.GenerateOptions)
 	if headerFile != "" {
-		f, err := os.Open(headerFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open header file %q: %v", headerFile, err)
-		}
-		opts.Header, err = ioutil.ReadAll(f)
+		var err error
+		opts.Header, err = ioutil.ReadFile(headerFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read header file %q: %v", headerFile, err)
 		}
