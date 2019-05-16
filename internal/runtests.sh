@@ -43,7 +43,8 @@ fi
 
 echo
 echo "Ensuring .go files are formatted with gofmt -s..."
-DIFF=$(gofmt -s -d `find . -name '*.go' -type f | grep -v testdata`)
+mapfile -t go_files < <(find . -name '*.go' -type f | grep -v testdata)
+DIFF="$(gofmt -s -d "${go_files[@]}")"
 if [ -n "$DIFF" ]; then
   echo "FAIL: please run gofmt -s and commit the result"
   echo "$DIFF";
@@ -61,7 +62,7 @@ fi;
 if [[ $(go version) == *go1\.12* ]]; then
   echo
   echo "Ensuring that there are no dependencies not listed in ./internal/alldeps..."
-  ./internal/listdeps.sh | diff ./internal/alldeps - && echo "OK" || {
+  (./internal/listdeps.sh | diff ./internal/alldeps - && echo "OK") || {
     echo "FAIL: dependencies changed; run: internal/listdeps.sh > internal/alldeps"
     # Module behavior may differ across versions.
     echo "using go version 1.12."
