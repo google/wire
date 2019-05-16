@@ -60,6 +60,12 @@ func (gen GenerateResult) Commit() error {
 	return ioutil.WriteFile(gen.OutputPath, gen.Content, 0666)
 }
 
+// GenerateOptions holds options for Generate.
+type GenerateOptions struct {
+	// Header will be inserted at the start of each generated file.
+	Header []byte
+}
+
 // Generate performs dependency injection for the packages that match the given
 // patterns, return a GenerateResult for each package. The package pattern is
 // defined by the underlying build system. For the go tool, this is described at
@@ -72,7 +78,10 @@ func (gen GenerateResult) Commit() error {
 // takes precedence.
 //
 // Generate may return one or more errors if it failed to load the packages.
-func Generate(ctx context.Context, wd string, env []string, patterns []string) ([]GenerateResult, []error) {
+func Generate(ctx context.Context, wd string, env []string, patterns []string, opts *GenerateOptions) ([]GenerateResult, []error) {
+	if opts == nil {
+		opts = &GenerateOptions{}
+	}
 	pkgs, errs := load(ctx, wd, env, patterns)
 	if len(errs) > 0 {
 		return nil, errs
@@ -94,6 +103,9 @@ func Generate(ctx context.Context, wd string, env []string, patterns []string) (
 		}
 		copyNonInjectorDecls(g, injectorFiles, pkg.TypesInfo)
 		goSrc := g.frame()
+		if len(opts.Header) > 0 {
+			goSrc = append(opts.Header, goSrc...)
+		}
 		fmtSrc, err := format.Source(goSrc)
 		if err != nil {
 			// This is likely a bug from a poorly generated source file.

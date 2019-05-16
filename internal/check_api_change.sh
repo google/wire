@@ -52,7 +52,7 @@ trap cleanup EXIT
 git clone -b "$UPSTREAM_BRANCH" . "$MASTER_CLONE_DIR" &> /dev/null
 
 incompatible_change_pkgs=()
-PKGS=$(cd "$MASTER_CLONE_DIR"; go list ./... | grep -v test)
+PKGS=$(cd "$MASTER_CLONE_DIR"; go list ./... | grep -v test | grep -v internal)
 for pkg in $PKGS; do
   echo "  Testing ${pkg}..."
 
