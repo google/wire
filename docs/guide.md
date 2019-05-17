@@ -395,9 +395,6 @@ func injectedMessage() string {
 }
 ```
 
-The type `Foo` can be a group that centralized a bunch of fields.
-`wire.FieldsOf` here save the need of writing helper functions such as:
-
 You can add as many field names to a `wire.FieldsOf` function as you like.
 
 ### Cleanup functions
