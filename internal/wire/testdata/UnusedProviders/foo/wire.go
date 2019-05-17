@@ -20,16 +20,17 @@ import (
 	"github.com/google/wire"
 )
 
-func injectBar() Bar {
+func injectFooBar() FooBar {
 	wire.Build(
 		provideFoo,                       // needed as input for provideBar
-		provideBar,                       // needed for Bar
+		provideBar,                       // needed for FooBar
 		partiallyUsedSet,                 // 1/2 providers in the set are needed
 		provideUnused,                    // not needed -> error
 		wire.Value("unused"),             // not needed -> error
 		unusedSet,                        // nothing in set is needed -> error
 		wire.Bind(new(Fooer), new(*Foo)), // binding to Fooer is not needed -> error
 		wire.FieldsOf(new(S), "Cfg"),     // S.Cfg not needed -> error
+		wire.Struct(new(FooBar), "MyFoo", "MyBar"), // needed for FooBar
 	)
-	return 0
+	return FooBar{}
 }

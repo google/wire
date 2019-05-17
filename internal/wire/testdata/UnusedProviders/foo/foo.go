@@ -21,7 +21,7 @@ import (
 )
 
 func main() {
-	fmt.Println(injectBar())
+	fmt.Println(injectFooBar())
 }
 
 type Foo int
@@ -30,6 +30,12 @@ type Unused int
 type UnusedInSet int
 type OneOfTwo int
 type TwoOfTwo int
+
+type FooBar struct {
+	MyFoo    *Foo
+	MyBar    Bar
+	MyUnused Unused
+}
 
 var (
 	unusedSet        = wire.NewSet(provideUnusedInSet)
