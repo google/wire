@@ -346,9 +346,9 @@ func injectReader() io.Reader {
 
 ### Use Fields of a Struct as Providers
 
-Sometimes the providers the user wants are some fields of a struct. Instead of
-writing "extraction" helper functions to provide each individual field, `wire`
-offers a shortcut, `FieldsOf`, to use those fields directly.
+Sometimes the providers the user wants are some fields of a struct. If you find
+yourself writing a provider like `getS` in the example below to promote struct
+fields into provided types:
 
 ```go
 type Foo struct {
@@ -357,10 +357,26 @@ type Foo struct {
     F float64
 }
 
+func getS(foo Foo) string {
+    return foo.S
+}
+
 func provideFoo() Foo {
     return Foo{ S: "Hello, World!", N: 1, F: 3.14 }
 }
 
+func injectedMessage() string {
+    wire.Build(
+        provideFoo,
+        getS,
+    return ""
+}
+```
+
+You can instead use `wire.FieldsOf` to use those fields directly without writing
+`getS`:
+
+```go
 func injectedMessage() string {
     wire.Build(
         provideFoo,
@@ -382,14 +398,7 @@ func injectedMessage() string {
 The type `Foo` can be a group that centralized a bunch of fields.
 `wire.FieldsOf` here save the need of writing helper functions such as:
 
-```go
-func getS(foo Foo) string {
-    return foo.S
-}
-```
-
-If other fields should be used by the injector, you can append their names in
-the `wire.FieldsOf` function.
+You can add as many field names to a `wire.FieldsOf` function as you like.
 
 ### Cleanup functions
 
