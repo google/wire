@@ -358,6 +358,7 @@ type Foo struct {
 }
 
 func getS(foo Foo) string {
+    // Bad! Use wire.FieldsOf instead.
     return foo.S
 }
 
