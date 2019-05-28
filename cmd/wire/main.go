@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/google/subcommands"
 	"github.com/google/wire/internal/wire"
 	"github.com/pmezard/go-difflib/difflib"
@@ -283,25 +284,18 @@ func (*showCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			}
 			return keys[i].ImportPath < keys[j].ImportPath
 		})
-		// ANSI color codes.
-		// TODO(light): Possibly use github.com/fatih/color?
-		const (
-			reset   = "\x1b[0m"
-			redBold = "\x1b[0;1;31m"
-			blue    = "\x1b[0;34m"
-			green   = "\x1b[0;32m"
-		)
+		boldRed := color.New(color.FgRed).Add(color.Bold)
 		for i, k := range keys {
 			if i > 0 {
 				fmt.Println()
 			}
 			outGroups, imports := gather(info, k)
-			fmt.Printf("%s%s%s\n", redBold, k, reset)
+			boldRed.Println(k)
 			for _, imp := range sortSet(imports) {
 				fmt.Printf("\t%s\n", imp)
 			}
 			for i := range outGroups {
-				fmt.Printf("%sOutputs given %s:%s\n", blue, outGroups[i].name, reset)
+				color.Blue("Outputs given %s:", outGroups[i].name)
 				out := make(map[string]token.Pos, outGroups[i].outputs.Len())
 				outGroups[i].outputs.Iterate(func(t types.Type, v interface{}) {
 					switch v := v.(type) {
@@ -316,7 +310,7 @@ func (*showCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 					}
 				})
 				for _, t := range sortSet(out) {
-					fmt.Printf("\t%s%s%s\n", green, t, reset)
+					color.Green("\t%s", t)
 					fmt.Printf("\t\tat %v\n", info.Fset.Position(out[t]))
 				}
 			}
@@ -329,7 +323,7 @@ func (*showCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 				}
 				return injectors[i].ImportPath < injectors[j].ImportPath
 			})
-			fmt.Printf("%sInjectors:%s\n", redBold, reset)
+			boldRed.Println("Injectors:")
 			for _, in := range injectors {
 				fmt.Printf("\t%v\n", in)
 			}
