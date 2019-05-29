@@ -31,7 +31,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fatih/color"
 	"github.com/google/subcommands"
 	"github.com/google/wire/internal/wire"
 	"github.com/pmezard/go-difflib/difflib"
@@ -284,18 +283,17 @@ func (*showCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			}
 			return keys[i].ImportPath < keys[j].ImportPath
 		})
-		boldRed := color.New(color.FgRed).Add(color.Bold)
 		for i, k := range keys {
 			if i > 0 {
 				fmt.Println()
 			}
 			outGroups, imports := gather(info, k)
-			boldRed.Println(k)
+			fmt.Println(k)
 			for _, imp := range sortSet(imports) {
 				fmt.Printf("\t%s\n", imp)
 			}
 			for i := range outGroups {
-				color.Blue("Outputs given %s:", outGroups[i].name)
+				fmt.Printf("\tOutputs given %s:\n", outGroups[i].name)
 				out := make(map[string]token.Pos, outGroups[i].outputs.Len())
 				outGroups[i].outputs.Iterate(func(t types.Type, v interface{}) {
 					switch v := v.(type) {
@@ -310,8 +308,8 @@ func (*showCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 					}
 				})
 				for _, t := range sortSet(out) {
-					color.Green("\t%s", t)
-					fmt.Printf("\t\tat %v\n", info.Fset.Position(out[t]))
+					fmt.Printf("\t\t%s\n", t)
+					fmt.Printf("\t\t\tat %v\n", info.Fset.Position(out[t]))
 				}
 			}
 		}
@@ -323,7 +321,7 @@ func (*showCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 				}
 				return injectors[i].ImportPath < injectors[j].ImportPath
 			})
-			boldRed.Println("Injectors:")
+			fmt.Println("\nInjectors:")
 			for _, in := range injectors {
 				fmt.Printf("\t%v\n", in)
 			}
