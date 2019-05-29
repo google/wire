@@ -1,8 +1,4 @@
-github.com/fatih/color
 github.com/google/subcommands
 github.com/google/wire
-github.com/mattn/go-colorable
-github.com/mattn/go-isatty
 github.com/pmezard/go-difflib
-golang.org/x/sys
 golang.org/x/tools
