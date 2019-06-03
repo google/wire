@@ -22,6 +22,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -816,7 +817,7 @@ func processStructProvider(fset *token.FileSet, info *types.Info, call *ast.Call
 	}
 	if allFields(call) {
 		for i := 0; i < st.NumFields(); i++ {
-			if isPrevented(st, i) {
+			if isPrevented(st.Tag(i)) {
 				continue
 			}
 			f := st.Field(i)
@@ -863,9 +864,8 @@ func allFields(call *ast.CallExpr) bool {
 // isPrevented checks whether field i is prevented by tag "-".
 // Since this is the only tag used by wire, we can do string comparison
 // without using reflect.
-// TODO(#179): parse the wire tag more robustly.
-func isPrevented(st *types.Struct, i int) bool {
-	return strings.Contains(st.Tag(i), `wire:"-"`)
+func isPrevented(tag string) bool {
+	return reflect.StructTag(tag).Get("wire") == "-"
 }
 
 // processBind creates an interface binding from a wire.Bind call.
@@ -1049,7 +1049,7 @@ func checkField(f ast.Expr, st *types.Struct) (*types.Var, error) {
 	}
 	for i := 0; i < st.NumFields(); i++ {
 		if strings.EqualFold(strconv.Quote(st.Field(i).Name()), b.Value) {
-			if isPrevented(st, i) {
+			if isPrevented(st.Tag(i)) {
 				return nil, fmt.Errorf("%s is prevented from injecting by wire", b.Value)
 			}
 			return st.Field(i), nil
