@@ -300,6 +300,22 @@ func injectFooBar() FooBar {
 
 And similarly if the injector needed a `*FooBar`.
 
+Sometimes it is useful to restrict certain fields to be accidentally filled by
+the injector. You can use a struct tag, `wire:"-"` to mark such fields like in
+the following example:
+
+```go
+type Foo struct {
+    mu sync.Mutex `wire:"-"`
+    Bar Bar
+}
+```
+
+When you provide the `Foo` type using `wire.Struct(new(Foo))`, wire will
+automatically omit the `mu` field. On the other hand, when you specify the
+prevented field like `wire.Struct(new(Foo), "mu")`, wire will not allow that and
+return an error.
+
 ### Binding Values
 
 Occasionally, it is useful to bind a basic value (usually `nil`) to a type.
