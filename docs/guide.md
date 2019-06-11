@@ -312,7 +312,7 @@ type Foo struct {
 ```
 
 When you provide the `Foo` type using `wire.Struct(new(Foo), "*")`, Wire will
-automatically omit the `mu` field. Additionally, it is and error to explicitly
+automatically omit the `mu` field. Additionally, it is an error to explicitly
 specify a prevented field as in `wire.Struct(new(Foo), "mu")`.
 
 ### Binding Values
