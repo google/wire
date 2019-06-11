@@ -300,9 +300,9 @@ func injectFooBar() FooBar {
 
 And similarly if the injector needed a `*FooBar`.
 
-Sometimes it is useful to restrict certain fields to be accidentally filled by
-the injector. You can use a struct tag, `wire:"-"` to mark such fields like in
-the following example:
+It is sometimes useful to prevent certain fields from being filled in by the
+injector, especially when passing `*` to `wire.Struct`. You can tag a field with
+`` `wire:"-"` `` to have Wire ignore such fields. For example:
 
 ```go
 type Foo struct {
@@ -311,10 +311,9 @@ type Foo struct {
 }
 ```
 
-When you provide the `Foo` type using `wire.Struct(new(Foo))`, wire will
-automatically omit the `mu` field. On the other hand, when you specify the
-prevented field like `wire.Struct(new(Foo), "mu")`, wire will not allow that and
-return an error.
+When you provide the `Foo` type using `wire.Struct(new(Foo), "*")`, Wire will
+automatically omit the `mu` field. Additionally, it is and error to explicitly
+specify a prevented field as in `wire.Struct(new(Foo), "mu")`.
 
 ### Binding Values
 
