@@ -146,10 +146,13 @@ func InterfaceValue(typ interface{}, x interface{}) ProvidedValue {
 // A StructProvider represents a named struct.
 type StructProvider struct{}
 
-// Struct specifies that the given struct type will be provided by filling in the fields
-// in the struct that have the names given. Each of the arguments must be a name
-// to the field they wish to reference. As a special case, if a single name "*"
-// is given, then all of the fields in the struct will be filled in.
+// Struct specifies that the given struct type will be provided by filling in the fields in the struct that have the names given.
+//
+// The first argument must be a pointer to the struct type, wire will analyze
+// and produce the struct type or the pointer to the struct type appropriatedly.
+// Each of the rest arguments must be a name to the field they wish to
+// reference. As a special case, if a single name "*" is given, then all of the
+// fields in the struct will be filled in.
 //
 // For example:
 //
