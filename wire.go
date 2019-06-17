@@ -148,11 +148,10 @@ type StructProvider struct{}
 
 // Struct specifies that the given struct type will be provided by filling in the fields in the struct that have the names given.
 //
-// The first argument must be a pointer to the struct type, wire will analyze
-// and produce the struct type or the pointer to the struct type appropriatedly.
-// Each of the rest arguments must be a name to the field they wish to
-// reference. As a special case, if a single name "*" is given, then all of the
-// fields in the struct will be filled in.
+// The first argument must be a pointer to the struct type. For a struct type
+// Foo, Wire will use field-filling to provide both Foo and *Foo. The remaining
+// arguments are field names to fill in. As a special case, if a single name "*"
+// is given, then all of the fields in the struct will be filled in.
 //
 // For example:
 //
