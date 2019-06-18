@@ -43,9 +43,8 @@ and ensuring that `$GOPATH/bin` is added to your `$PATH`.
 
 ## Project status
 
-**This project is in alpha and is not yet suitable for production.**
-
-While in alpha, the API is subject to breaking changes.
+This project is in a beta state as of v0.3.0 and may be subject to
+backward-incompatible changes.
 
 ## Community
 
