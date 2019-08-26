@@ -84,6 +84,10 @@ type call struct {
 
 	valueExpr     ast.Expr
 	valueTypeInfo *types.Info
+
+	// The following are only set for kind == selectorExpr:
+
+	ptrToField bool
 }
 
 // solve finds the sequence of calls required to produce an output type
@@ -226,14 +230,18 @@ dfs:
 				index.Set(curr.t, errAbort)
 				continue dfs
 			}
-			// Use the args[0] to store the position of the parent struct.
+			// Use args[0] to store the position of the parent struct.
 			args := []int{v.(int)}
+			// len(f.Out) is always 2; if curr.t is the 2nd one, then the call must
+			// provide a pointer to the field.
+			ptrToField := types.Identical(curr.t, f.Out[1])
 			calls = append(calls, call{
-				kind: selectorExpr,
-				pkg:  f.Pkg,
-				name: f.Name,
-				out:  curr.t,
-				args: args,
+				kind:       selectorExpr,
+				pkg:        f.Pkg,
+				name:       f.Name,
+				out:        curr.t,
+				args:       args,
+				ptrToField: ptrToField,
 			})
 		default:
 			panic("unknown return value from ProviderSet.For")
@@ -382,12 +390,14 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 	}
 	for _, f := range set.Fields {
 		src := &providerSetSrc{Field: f}
-		if prevSrc := srcMap.At(f.Out); prevSrc != nil {
-			ec.add(bindingConflictError(fset, f.Out, set, src, prevSrc.(*providerSetSrc)))
-			continue
+		for _, typ := range f.Out {
+			if prevSrc := srcMap.At(typ); prevSrc != nil {
+				ec.add(bindingConflictError(fset, typ, set, src, prevSrc.(*providerSetSrc)))
+				continue
+			}
+			providerMap.Set(typ, &ProvidedType{t: typ, f: f})
+			srcMap.Set(typ, src)
 		}
-		providerMap.Set(f.Out, &ProvidedType{t: f.Out, f: f})
-		srcMap.Set(f.Out, src)
 	}
 	if len(ec.errors) > 0 {
 		return nil, nil, ec.errors

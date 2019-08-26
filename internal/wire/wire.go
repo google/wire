@@ -731,10 +731,14 @@ func (ig *injectorGen) valueExpr(lname string, c *call) {
 
 func (ig *injectorGen) fieldExpr(lname string, c *call) {
 	a := c.args[0]
+	ig.p("\t%s := ", lname)
+	if c.ptrToField {
+		ig.p("&")
+	}
 	if a < len(ig.paramNames) {
-		ig.p("\t%s := %s.%s\n", lname, ig.paramNames[a], c.name)
+		ig.p("%s.%s\n", ig.paramNames[a], c.name)
 	} else {
-		ig.p("\t%s := %s.%s\n", lname, ig.localNames[a-len(ig.paramNames)], c.name)
+		ig.p("%s.%s\n", ig.localNames[a-len(ig.paramNames)], c.name)
 	}
 }
 

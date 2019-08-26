@@ -231,12 +231,13 @@ have a provider in the same set that provides the concrete type.
 [type identity]: https://golang.org/ref/spec#Type_identity
 [return concrete types]: https://github.com/golang/go/wiki/CodeReviewComments#interfaces
 
-### Struct Providers
+### Injected Structs
 
-Structs can also be marked as providers. Use the `wire.Struct` function to
-inject a struct type and tell the injector which field(s) should be injected.
+Structs can be constructed using provided types. Use the `wire.Struct` function
+to inject a struct type and tell the injector which field(s) should be injected.
 The injector will fill in each field using the provider for the field's type.
-For a given struct type `S`, this would provide both `S` and `*S`. For example,
+
+For a given struct type `S`, `wire.Struct` provides both `S` and `*S`. For example,
 given the following providers:
 
 ```go
@@ -298,7 +299,18 @@ func injectFooBar() FooBar {
 }
 ```
 
-And similarly if the injector needed a `*FooBar`.
+If the injector returned a `*FooBar` instead of a `FooBar`, the generated injector
+would look like this:
+
+```go
+func injectFooBar() *FooBar {
+    foo := ProvideFoo()
+    fooBar := &FooBar{
+        MyFoo: foo,
+    }
+    return fooBar
+}
+```
 
 It is sometimes useful to prevent certain fields from being filled in by the
 injector, especially when passing `*` to `wire.Struct`. You can tag a field with
@@ -412,6 +424,7 @@ func injectedMessage() string {
 ```
 
 You can add as many field names to a `wire.FieldsOf` function as you like.
+For a given field type `T`, `FieldsOf` provides both `T` and `*T`.
 
 ### Cleanup functions
 
