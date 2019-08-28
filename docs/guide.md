@@ -231,14 +231,13 @@ have a provider in the same set that provides the concrete type.
 [type identity]: https://golang.org/ref/spec#Type_identity
 [return concrete types]: https://github.com/golang/go/wiki/CodeReviewComments#interfaces
 
-### Injected Structs
+### Struct Providers
 
 Structs can be constructed using provided types. Use the `wire.Struct` function
-to inject a struct type and tell the injector which field(s) should be injected.
+to construct a struct type and tell the injector which field(s) should be injected.
 The injector will fill in each field using the provider for the field's type.
-
-For a given struct type `S`, `wire.Struct` provides both `S` and `*S`. For example,
-given the following providers:
+For the resulting struct type `S`, `wire.Struct` provides both `S` and `*S`. For
+example, given the following providers:
 
 ```go
 type Foo int

@@ -220,7 +220,7 @@ type InjectorArgs struct {
 	Pos token.Pos
 }
 
-// Field describes a list of fields from a struct.
+// Field describes a specific field selected from a struct.
 type Field struct {
 	// Parent is the struct or pointer to the struct that the field belongs to.
 	Parent types.Type
