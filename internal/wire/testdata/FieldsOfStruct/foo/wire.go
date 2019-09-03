@@ -26,3 +26,10 @@ func injectedMessage() string {
 		wire.FieldsOf(new(S), "Foo"))
 	return ""
 }
+
+func injectedMessagePtr() *string {
+	wire.Build(
+		provideS,
+		wire.FieldsOf(new(S), "Foo"))
+	return nil
+}

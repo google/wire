@@ -220,7 +220,7 @@ type InjectorArgs struct {
 	Pos token.Pos
 }
 
-// Field describes a list of fields from a struct.
+// Field describes a specific field selected from a struct.
 type Field struct {
 	// Parent is the struct or pointer to the struct that the field belongs to.
 	Parent types.Type
@@ -231,8 +231,9 @@ type Field struct {
 	// Pos is the source position of the field declaration.
 	// defining these fields.
 	Pos token.Pos
-	// Out is the field's type.
-	Out types.Type
+	// Out is the field's provided types. The first element provides the
+	// field type, the second element provides a pointer to it.
+	Out []types.Type
 }
 
 // Load finds all the provider sets in the packages that match the given
@@ -458,7 +459,7 @@ func newObjectCache(pkgs []*packages.Package) *objectCache {
 }
 
 // get converts a Go object into a Wire structure. It may return a *Provider, an
-// *IfaceBinding, a *ProviderSet, a *Value, or a *Fields.
+// *IfaceBinding, a *ProviderSet, a *Value, or a []*Field.
 func (oc *objectCache) get(obj types.Object) (val interface{}, errs []error) {
 	ref := objRef{
 		importPath: obj.Pkg().Path(),
@@ -515,7 +516,7 @@ func (oc *objectCache) varDecl(obj *types.Var) *ast.ValueSpec {
 }
 
 // processExpr converts an expression into a Wire structure. It may return a
-// *Provider, an *IfaceBinding, a *ProviderSet, a *Value or a *Field.
+// *Provider, an *IfaceBinding, a *ProviderSet, a *Value or a []*Field.
 func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Expr, varName string) (interface{}, []error) {
 	exprPos := oc.fset.Position(expr.Pos())
 	expr = astutil.Unparen(expr)
@@ -988,7 +989,7 @@ func processInterfaceValue(fset *token.FileSet, info *types.Info, call *ast.Call
 	}, nil
 }
 
-// processFieldsOf creates a list of fields from a wire.FieldsOf call.
+// processFieldsOf creates a slice of fields from a wire.FieldsOf call.
 func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) ([]*Field, error) {
 	// Assumes that call.Fun is wire.FieldsOf.
 
@@ -1034,7 +1035,7 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 			Name:   v.Name(),
 			Pkg:    v.Pkg(),
 			Pos:    v.Pos(),
-			Out:    v.Type(),
+			Out:    []types.Type{v.Type(), types.NewPointer(v.Type())},
 		})
 	}
 	return fields, nil
