@@ -12,9 +12,3 @@ func injectedMessage() string {
 	string2 := s.Foo
 	return string2
 }
-
-func injectedMessagePtr() *string {
-	s := provideS()
-	string2 := &s.Foo
-	return string2
-}

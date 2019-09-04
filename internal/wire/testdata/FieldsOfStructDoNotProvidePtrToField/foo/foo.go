@@ -25,5 +25,5 @@ func provideS() S {
 }
 
 func main() {
-	fmt.Println(injectedMessage())
+	fmt.Println("pointer to " + *injectedMessagePtr())
 }

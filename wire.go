@@ -187,6 +187,10 @@ type StructFields struct{}
 //
 //  func NewStruct() *S { /* ... */ }
 //  var Set = wire.NewSet(wire.FieldsOf(new(*S), "MyFoo", "MyBar"))
+//
+//  If the structType argument is a pointer to a pointer to a struct, then FieldsOf
+//  additionally provides a pointer to each field type (e.g., **Foo and **Bar in the
+//  example above).
 func FieldsOf(structType interface{}, fieldNames ...string) StructFields {
 	return StructFields{}
 }

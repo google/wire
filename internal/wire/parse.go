@@ -232,7 +232,8 @@ type Field struct {
 	// defining these fields.
 	Pos token.Pos
 	// Out is the field's provided types. The first element provides the
-	// field type, the second element provides a pointer to it.
+	// field type. If the field is coming from a pointer to a struct,
+	// there will be a second element providing a pointer to the field.
 	Out []types.Type
 }
 
@@ -1006,6 +1007,7 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 	}
 
 	var struc *types.Struct
+	isPtrToStruct := false
 	switch t := structPtr.Elem().Underlying().(type) {
 	case *types.Pointer:
 		struc, ok = t.Elem().Underlying().(*types.Struct)
@@ -1013,6 +1015,7 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 			return nil, notePosition(fset.Position(call.Pos()),
 				fmt.Errorf(firstArgReqFormat, types.TypeString(struc, nil)))
 		}
+		isPtrToStruct = true
 	case *types.Struct:
 		struc = t
 	default:
@@ -1030,12 +1033,18 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 		if err != nil {
 			return nil, notePosition(fset.Position(call.Pos()), err)
 		}
+		out := []types.Type{v.Type()}
+		if isPtrToStruct {
+			// If the field is from a pointer to a struct, then
+			// wire.Fields also provides a pointer to the field.
+			out = append(out, types.NewPointer(v.Type()))
+		}
 		fields = append(fields, &Field{
 			Parent: structPtr.Elem(),
 			Name:   v.Name(),
 			Pkg:    v.Pkg(),
 			Pos:    v.Pos(),
-			Out:    []types.Type{v.Type(), types.NewPointer(v.Type())},
+			Out:    out,
 		})
 	}
 	return fields, nil

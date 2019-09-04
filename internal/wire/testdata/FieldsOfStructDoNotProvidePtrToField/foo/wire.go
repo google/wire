@@ -12,18 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//+build wireinject
+
 package main
 
-import "fmt"
+import (
+	"github.com/google/wire"
+)
 
-type S struct {
-	Foo string
-}
-
-func provideS() S {
-	return S{Foo: "Hello, World!"}
-}
-
-func main() {
-	fmt.Println(injectedMessage())
+func injectedMessagePtr() *string {
+	// This shouldn't work; FieldsOf provides a pointer to the
+	// field only when the struct type is a pointer to a struct.
+	// See FieldsOfStructPointer for a working example using
+	// a pointer to a struct.
+	wire.Build(
+		provideS,
+		wire.FieldsOf(new(S), "Foo"))
+	return nil
 }
