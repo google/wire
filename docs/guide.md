@@ -423,7 +423,8 @@ func injectedMessage() string {
 ```
 
 You can add as many field names to a `wire.FieldsOf` function as you like.
-For a given field type `T`, `FieldsOf` provides both `T` and `*T`.
+For a given field type `T`, `FieldsOf` provides at least `T`; if the struct
+argument is a pointer to a struct, then `FieldsOf` also provides `*T`.
 
 ### Cleanup functions
 

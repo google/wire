@@ -232,9 +232,9 @@ dfs:
 			}
 			// Use args[0] to store the position of the parent struct.
 			args := []int{v.(int)}
-			// len(f.Out) is always 2; if curr.t is the 2nd one, then the call must
+			// If f.Out has 2 elements and curr.t is the 2nd one, then the call must
 			// provide a pointer to the field.
-			ptrToField := types.Identical(curr.t, f.Out[1])
+			ptrToField := len(f.Out) == 2 && types.Identical(curr.t, f.Out[1])
 			calls = append(calls, call{
 				kind:       selectorExpr,
 				pkg:        f.Pkg,

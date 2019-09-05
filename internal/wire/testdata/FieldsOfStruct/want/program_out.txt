@@ -1,2 +1,1 @@
 Hello, World!
-pointer to Hello, World!
