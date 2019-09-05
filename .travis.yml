@@ -49,7 +49,9 @@ jobs:
       os: linux
     - go: "1.12.x"
       os: linux
-    - go: "1.12.x"
+    - go: "1.13.x"
+      os: linux
+    - go: "1.13.x"
       os: osx
-    - go: "1.12.x"
+    - go: "1.13.x"
       os: windows
