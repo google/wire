@@ -98,7 +98,8 @@ func newGenerateOptions(headerFile string) (*wire.GenerateOptions, error) {
 }
 
 type genCmd struct {
-	headerFile string
+	headerFile     string
+	outputFileName string
 }
 
 func (*genCmd) Name() string { return "gen" }
@@ -115,6 +116,7 @@ func (*genCmd) Usage() string {
 }
 func (cmd *genCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&cmd.headerFile, "header_file", "", "path to file to insert as a header in wire_gen.go")
+	f.StringVar(&cmd.outputFileName, "output_file", "", "change the output default file 'wire_gen.go' for a custom name.")
 }
 
 func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -128,6 +130,11 @@ func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		log.Println(err)
 		return subcommands.ExitFailure
 	}
+	opts.OutputFile = "wire_gen.go"
+	if cmd.outputFileName != "" {
+		opts.OutputFile = cmd.outputFileName
+	}
+
 	outs, errs := wire.Generate(ctx, wd, os.Environ(), packages(f), opts)
 	if len(errs) > 0 {
 		logErrors(errs)
@@ -200,6 +207,7 @@ func (cmd *diffCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		log.Println(err)
 		return subcommands.ExitFailure
 	}
+
 	outs, errs := wire.Generate(ctx, wd, os.Environ(), packages(f), opts)
 	if len(errs) > 0 {
 		logErrors(errs)
