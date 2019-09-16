@@ -63,7 +63,8 @@ func (gen GenerateResult) Commit() error {
 // GenerateOptions holds options for Generate.
 type GenerateOptions struct {
 	// Header will be inserted at the start of each generated file.
-	Header []byte
+	Header     []byte
+	OutputFile string
 }
 
 // Generate performs dependency injection for the packages that match the given
@@ -94,7 +95,7 @@ func Generate(ctx context.Context, wd string, env []string, patterns []string, o
 			generated[i].Errs = append(generated[i].Errs, err)
 			continue
 		}
-		generated[i].OutputPath = filepath.Join(outDir, "wire_gen.go")
+		generated[i].OutputPath = filepath.Join(outDir, opts.OutputFile)
 		g := newGen(pkg)
 		injectorFiles, errs := generateInjectors(g, pkg)
 		if len(errs) > 0 {
