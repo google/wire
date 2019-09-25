@@ -116,7 +116,7 @@ func (*genCmd) Usage() string {
 }
 func (cmd *genCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&cmd.headerFile, "header_file", "", "path to file to insert as a header in wire_gen.go")
-	f.StringVar(&cmd.prefixFileName, "prefix", "", "prefix to the output files concat with 'wire_gen.go' suffix.")
+	f.StringVar(&cmd.prefixFileName, "output_file_prefix", "", "string to prepend to output file names.")
 }
 
 func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
