@@ -43,10 +43,12 @@ and ensuring that `$GOPATH/bin` is added to your `$PATH`.
 
 ## Project status
 
-As of version v0.3.0, Wire is *beta*. Throughout the beta period, we encourage
-you to use Wire and provide feedback. We will focus on improving usability and
-fixing bugs before the 1.0 release. We do not intend to introduce any breaking
-changes unless there is a strong reason to do so.
+As of version v0.3.0, Wire is *beta* and is considered feature complete. It
+works well for the tasks it was designed to perform, and we prefer to keep it
+as simple as possible.
+
+We'll not be accepting new features at this time, but will gladly accept bug
+reports and fixes.
 
 ## Community
 
