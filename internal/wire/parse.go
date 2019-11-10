@@ -805,7 +805,7 @@ func processStructProvider(fset *token.FileSet, info *types.Info, call *ast.Call
 	st, ok := structPtr.Elem().Underlying().(*types.Struct)
 	if !ok {
 		return nil, notePosition(fset.Position(call.Pos()),
-			fmt.Errorf(firstArgReqFormat, types.TypeString(st, nil)))
+			fmt.Errorf(firstArgReqFormat, types.TypeString(structPtr, nil)))
 	}
 
 	stExpr := call.Args[0].(*ast.CallExpr)
