@@ -72,7 +72,9 @@ func TestWire(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
+			// TODO(light): These tests should be parallelizable, but this causes
+			// intermittent failures. See https://github.com/google/wire/issues/66
+			// for details.
 
 			// Materialize a temporary GOPATH directory.
 			gopath, err := ioutil.TempDir("", "wire_test")
