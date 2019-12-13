@@ -367,12 +367,12 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 	}
 
 	// Perform one pass to collect all imports, followed by the real pass.
-	injectPass(name, sig, calls, set, &injectorGen{
+	injectPass(name, sig, calls, &injectorGen{
 		g:       g,
 		errVar:  disambiguate("err", g.nameInFileScope),
 		discard: true,
 	})
-	injectPass(name, sig, calls, set, &injectorGen{
+	injectPass(name, sig, calls, &injectorGen{
 		g:       g,
 		errVar:  disambiguate("err", g.nameInFileScope),
 		discard: false,
@@ -586,7 +586,7 @@ type injectorGen struct {
 
 // injectPass generates an injector given the output from analysis.
 // The sig passed in should be verified.
-func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSet, ig *injectorGen) {
+func injectPass(name string, sig *types.Signature, calls []call, ig *injectorGen) {
 	params := sig.Params()
 	injectSig, err := funcOutput(sig)
 	if err != nil {
@@ -643,7 +643,12 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 		}
 	}
 	if len(calls) == 0 {
-		ig.p("\treturn %s", ig.paramNames[set.For(injectSig.out).Arg().Index])
+		for i := 0; i < params.Len(); i++ {
+			if types.Identical(injectSig.out, params.At(i).Type()) {
+				ig.p("\treturn %s", ig.paramNames[i])
+				break
+			}
+		}
 	} else {
 		ig.p("\treturn %s", ig.localNames[len(calls)-1])
 	}
