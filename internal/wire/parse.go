@@ -534,7 +534,7 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 		}
 		pkg := fnObj.Pkg()
 		if pkg == nil {
-			return nil, []error{notePosition(exprPos, errors.New("unknown pattern - pkg in fnObj is nil - "+fmt.Sprintf("%s", fnObj)))}
+			return nil, []error{notePosition(exprPos, fmt.Errorf("unknown pattern - pkg in fnObj is nil - %s", fnObj))}
 		}
 		if !isWireImport(pkg.Path()) {
 			return nil, []error{notePosition(exprPos, errors.New("unknown pattern"))}
