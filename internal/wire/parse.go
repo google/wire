@@ -529,7 +529,14 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 	}
 	if call, ok := expr.(*ast.CallExpr); ok {
 		fnObj := qualifiedIdentObject(info, call.Fun)
-		if fnObj == nil || !isWireImport(fnObj.Pkg().Path()) {
+		if fnObj == nil {
+			return nil, []error{notePosition(exprPos, errors.New("unknown pattern fnObj nil"))}
+		}
+		pkg := fnObj.Pkg()
+		if pkg == nil {
+			return nil, []error{notePosition(exprPos, fmt.Errorf("unknown pattern - pkg in fnObj is nil - %s", fnObj))}
+		}
+		if !isWireImport(pkg.Path()) {
 			return nil, []error{notePosition(exprPos, errors.New("unknown pattern"))}
 		}
 		switch fnObj.Name() {
