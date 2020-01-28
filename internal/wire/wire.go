@@ -99,7 +99,7 @@ func Generate(ctx context.Context, wd string, env []string, patterns []string, o
 		generated[i].OutputPath = filepath.Join(outDir, opts.PrefixOutputFile+"wire_gen.go")
 		command := "wire"
 		if opts.UseGoRun {
-			command = "go run github.com/google/wire/cmd/wire"
+			command = "go run github.com/google/wire/cmd/wire --use_go_run"
 		}
 		g := newGen(pkg, command)
 		injectorFiles, errs := generateInjectors(g, pkg)
