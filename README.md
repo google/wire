@@ -3,6 +3,7 @@
 [![Build Status](https://travis-ci.com/google/wire.svg?branch=master)][travis]
 [![godoc](https://godoc.org/github.com/google/wire?status.svg)][godoc]
 [![Coverage](https://codecov.io/gh/google/wire/branch/master/graph/badge.svg)](https://codecov.io/gh/google/wire)
+[![Go Report Card](https://goreportcard.com/badge/github.com/google/wire)](https://goreportcard.com/report/github.com/google/wire)
 
 
 Wire is a code generation tool that automates connecting components using
