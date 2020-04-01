@@ -33,6 +33,7 @@ const (
 	structProvider
 	valueExpr
 	selectorExpr
+	sliceExpr
 )
 
 // A call represents a step of an injector function.  It may be either a
@@ -243,6 +244,44 @@ dfs:
 				args:       args,
 				ptrToField: ptrToField,
 			})
+		case pv.IsSlice():
+			// slice provider
+			s := pv.s
+			visitedProviders := true
+			for i := len(s.Providers) - 1; i >= 0; i-- {
+				a := s.Providers[i]
+				if index.At(a.Out[0]) == nil {
+					if visitedProviders {
+						// Make sure to re-visit this type after visiting all arguments.
+						stk = append(stk, curr)
+						visitedProviders = false
+					}
+					stk = append(stk, frame{t: a.Out[0], from: curr.t, up: &curr})
+				}
+			}
+			if !visitedProviders {
+				continue
+			}
+			args := make([]int, len(s.Providers))
+			ins := make([]types.Type, len(s.Providers))
+			for i := range s.Providers {
+				ins[i] = s.Providers[i].Out[0]
+				v := index.At(s.Providers[i].Out[0])
+				if v == errAbort {
+					index.Set(curr.t, errAbort)
+					continue dfs
+				}
+				args[i] = v.(int)
+			}
+			index.Set(curr.t, given.Len()+len(calls))
+			calls = append(calls, call{
+				kind: sliceExpr,
+				pkg:  s.Pkg,
+				name: s.Name,
+				args: args,
+				ins:  ins,
+				out:  curr.t,
+			})
 		default:
 			panic("unknown return value from ProviderSet.For")
 		}
@@ -321,6 +360,19 @@ func verifyArgsUsed(set *ProviderSet, used []*providerSetSrc) []error {
 		}
 		if !found {
 			errs = append(errs, fmt.Errorf("unused field %q.%s", f.Parent, f.Name))
+		}
+	}
+	// slice used
+	for _, s := range set.Slices {
+		found := false
+		for _, u := range used {
+			if u.Slice == s {
+				found = true
+				break
+			}
+		}
+		if !found {
+			errs = append(errs, fmt.Errorf("unused slice to type %s", types.TypeString(s.Iface, nil)))
 		}
 	}
 	return errs
@@ -423,6 +475,29 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 		providerMap.Set(b.Iface, concrete)
 		srcMap.Set(b.Iface, src)
 	}
+	// Process Slice
+	for _, s := range set.Slices {
+		src := &providerSetSrc{Slice: s}
+		if prevSrc := srcMap.At(s.Iface); prevSrc != nil {
+			ec.add(bindingConflictError(fset, s.Iface, set, src, prevSrc.(*providerSetSrc)))
+			continue
+		}
+		providerMap.Set(s.Iface, &ProvidedType{t: s.Iface, s: s})
+		srcMap.Set(s.Iface, src)
+		// slice deps args
+		for _, p := range s.Providers {
+			src := &providerSetSrc{Provider: p}
+			for _, typ := range p.Out {
+				if prevSrc := srcMap.At(typ); prevSrc != nil {
+					ec.add(bindingConflictError(fset, typ, set, src, prevSrc.(*providerSetSrc)))
+					continue
+				}
+				providerMap.Set(typ, &ProvidedType{t: typ, p: p})
+				srcMap.Set(typ, src)
+			}
+		}
+	}
+
 	if len(ec.errors) > 0 {
 		return nil, nil, ec.errors
 	}
@@ -499,6 +574,8 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 						stk = append(stk, next)
 					}
 				}
+			case pt.IsSlice():
+				// Todo slice cycle
 			default:
 				panic("invalid provider map value")
 			}

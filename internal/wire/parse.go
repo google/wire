@@ -40,6 +40,7 @@ type providerSetSrc struct {
 	Import      *ProviderSet
 	InjectorArg *InjectorArg
 	Field       *Field
+	Slice       *Slice
 }
 
 // description returns a string describing the source of p, including line numbers.
@@ -68,6 +69,8 @@ func (p *providerSetSrc) description(fset *token.FileSet, typ types.Type) string
 		return fmt.Sprintf("argument %s to injector function %s (%s)", args.Tuple.At(p.InjectorArg.Index).Name(), args.Name, fset.Position(args.Pos))
 	case p.Field != nil:
 		return fmt.Sprintf("wire.FieldsOf (%s)", fset.Position(p.Field.Pos))
+	case p.Slice != nil:
+		return fmt.Sprintf("wire.Slice (%s)", fset.Position(p.Slice.Pos))
 	}
 	panic("providerSetSrc with no fields set")
 }
@@ -103,6 +106,7 @@ type ProviderSet struct {
 	Values    []*Value
 	Fields    []*Field
 	Imports   []*ProviderSet
+	Slices    []*Slice
 	// InjectorArgs is only filled in for wire.Build.
 	InjectorArgs *InjectorArgs
 
@@ -141,6 +145,15 @@ type IfaceBinding struct {
 
 	// Pos is the position where the binding was declared.
 	Pos token.Pos
+}
+
+type Slice struct {
+	Iface     types.Type
+	Providers []*Provider
+	// Pos is the position where the binding was declared.
+	Pos  token.Pos
+	Pkg  *types.Package
+	Name string
 }
 
 // Provider records the signature of a provider. A provider is a
@@ -573,6 +586,12 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 				return nil, []error{notePosition(exprPos, err)}
 			}
 			return v, nil
+		case "Slice":
+			v, err := oc.processSlice(oc.fset, info, call, pkgPath)
+			if err != nil {
+				return nil, []error{notePosition(exprPos, err)}
+			}
+			return v, nil
 		default:
 			return nil, []error{notePosition(exprPos, errors.New("unknown pattern"))}
 		}
@@ -614,6 +633,8 @@ func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast
 			pset.Values = append(pset.Values, item)
 		case []*Field:
 			pset.Fields = append(pset.Fields, item...)
+		case *Slice:
+			pset.Slices = append(pset.Slices, item)
 		default:
 			panic("unknown item type")
 		}
@@ -923,6 +944,56 @@ func processBind(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*If
 	}, nil
 }
 
+func (oc *objectCache) processSlice(fset *token.FileSet, info *types.Info, call *ast.CallExpr, pkgPath string) (*Slice, error) {
+	if len(call.Args) < 2 {
+		return nil, notePosition(fset.Position(call.Pos()),
+			errors.New("call to Slice takes greater or equal to two arguments"))
+	}
+	ifaceArgType := info.TypeOf(call.Args[0])
+	ifaceSliceType, ok := ifaceArgType.(*types.Slice)
+	if !ok {
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf("first argument to Slice must be a slice type; found %s", types.TypeString(ifaceArgType, nil)))
+	}
+	ifaceNameType := ifaceSliceType.Elem().(*types.Named)
+	ifaceType := ifaceNameType.Underlying().(*types.Interface)
+	ifaceObj := ifaceNameType.Obj()
+	slice := &Slice{
+		Pkg:       ifaceObj.Pkg(),
+		Name:      ifaceObj.Name(),
+		Iface:     ifaceSliceType,
+		Providers: nil,
+		Pos:       call.Pos(),
+	}
+	for i := 1; i < len(call.Args); i++ {
+		item, errs := oc.processExpr(info, pkgPath, call.Args[i], "")
+		if len(errs) > 0 {
+			return nil, errs[0]
+		}
+		switch item := item.(type) {
+		case *Provider:
+			typ := item.Out[0]
+			if types.Implements(typ, ifaceType) {
+				slice.Providers = append(slice.Providers, item)
+			} else {
+				return nil, notePosition(
+					fset.Position(call.Pos()),
+					fmt.Errorf(
+						"%s does not implement %s",
+						types.TypeString(typ, nil),
+						types.TypeString(ifaceType, nil),
+					),
+				)
+			}
+		// Todo more expr support
+		default:
+			return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("unknown item type: %s", item))
+		}
+	}
+
+	return slice, nil
+}
+
 // processValue creates a value from a wire.Value call.
 func processValue(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*Value, error) {
 	// Assumes that call.Fun is wire.Value.
@@ -1159,11 +1230,12 @@ type ProvidedType struct {
 	v *Value
 	a *InjectorArg
 	f *Field
+	s *Slice
 }
 
 // IsNil reports whether pt is the zero value.
 func (pt ProvidedType) IsNil() bool {
-	return pt.p == nil && pt.v == nil && pt.a == nil && pt.f == nil
+	return pt.p == nil && pt.v == nil && pt.a == nil && pt.f == nil && pt.s == nil
 }
 
 // Type returns the output type.
@@ -1195,6 +1267,10 @@ func (pt ProvidedType) IsArg() bool {
 // IsField reports whether pt points to a Fields.
 func (pt ProvidedType) IsField() bool {
 	return pt.f != nil
+}
+
+func (pt ProvidedType) IsSlice() bool {
+	return pt.s != nil
 }
 
 // Provider returns pt as a Provider pointer. It panics if pt does not point
@@ -1231,6 +1307,13 @@ func (pt ProvidedType) Field() *Field {
 		panic("ProvidedType does not hold a Field")
 	}
 	return pt.f
+}
+
+func (pt ProvidedType) Slice() *Slice {
+	if pt.s == nil {
+		panic("ProvidedType does not hold a Slice")
+	}
+	return pt.s
 }
 
 // bindShouldUsePointer loads the wire package the user is importing from their

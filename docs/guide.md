@@ -463,3 +463,56 @@ func injectFoo() Foo {
     panic(wire.Build(/* ... */))
 }
 ```
+
+### Slice of provide
+
+```go
+type Controller interface {
+	InitRouter(router *mux.Router)
+}
+
+type HomeController struct {}
+
+func NewHomeController() *HomeController {
+	return &HomeController{}
+}
+
+func (c *HomeController) InitRouter(router *mux.Router)  {
+	router.HandleFunc("/", c.Home)
+}
+
+func (c *HomeController) Home(w http.ResponseWriter, r *http.Request)  {
+	_, _ = fmt.Fprint(w, "OK")
+}
+
+func InitRouter(handles ...types.Controller) *mux.Router {
+	router := mux.NewRouter()
+	for _, h := range handles {
+		h.InitRouter(router)
+	}
+	return router
+}
+
+func NewRouter() *mux.Router {
+    panic(wire.Build(
+        InitRouter,
+        wire.Slice(
+            []Controller(nil),
+            NewHomeController,
+        ),
+    ))
+}
+```
+
+gen to:
+
+```go
+func NewRouter() *mux.Router {
+    homeController := NewHomeController()
+    v := []Controller{
+        homeController,
+    }
+    router := InitRouter(v...)
+    return router
+}
+```

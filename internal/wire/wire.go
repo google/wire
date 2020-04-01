@@ -638,6 +638,8 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 			ig.valueExpr(lname, c)
 		case selectorExpr:
 			ig.fieldExpr(lname, c)
+		case sliceExpr:
+			ig.sliceExpr(lname, c)
 		default:
 			panic("unknown kind")
 		}
@@ -723,6 +725,21 @@ func (ig *injectorGen) structProviderCall(lname string, c *call) {
 
 func (ig *injectorGen) valueExpr(lname string, c *call) {
 	ig.p("\t%s := %s\n", lname, ig.g.values[c.valueExpr])
+}
+
+func (ig *injectorGen) sliceExpr(lname string, c *call) {
+	ig.p("\t%s := []%s{ \n", lname, ig.g.qualifiedID(c.pkg.Name(), c.pkg.Path(), c.name))
+	for i, a := range c.args {
+		if i > 0 {
+			ig.p(",\n")
+		}
+		if a < len(ig.paramNames) {
+			ig.p("\t\t%s", ig.paramNames[a])
+		} else {
+			ig.p("\t\t%s", ig.localNames[a-len(ig.paramNames)])
+		}
+	}
+	ig.p(",\n\t}\n")
 }
 
 func (ig *injectorGen) fieldExpr(lname string, c *call) {

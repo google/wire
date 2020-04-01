@@ -194,3 +194,9 @@ type StructFields struct{}
 func FieldsOf(structType interface{}, fieldNames ...string) StructFields {
 	return StructFields{}
 }
+
+type SliceProvider struct{}
+
+func Slice(sliceType interface{}, values ...interface{}) SliceProvider {
+	return SliceProvider{}
+}
