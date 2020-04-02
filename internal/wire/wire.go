@@ -728,18 +728,15 @@ func (ig *injectorGen) valueExpr(lname string, c *call) {
 }
 
 func (ig *injectorGen) sliceExpr(lname string, c *call) {
-	ig.p("\t%s := []%s{ \n", lname, ig.g.qualifiedID(c.pkg.Name(), c.pkg.Path(), c.name))
-	for i, a := range c.args {
-		if i > 0 {
-			ig.p(",\n")
-		}
+	ig.p("\t%s := []%s{\n", lname, ig.g.qualifiedID(c.pkg.Name(), c.pkg.Path(), c.name))
+	for _, a := range c.args {
 		if a < len(ig.paramNames) {
-			ig.p("\t\t%s", ig.paramNames[a])
+			ig.p("\t\t%s,\n", ig.paramNames[a])
 		} else {
-			ig.p("\t\t%s", ig.localNames[a-len(ig.paramNames)])
+			ig.p("\t\t%s,\n", ig.localNames[a-len(ig.paramNames)])
 		}
 	}
-	ig.p(",\n\t}\n")
+	ig.p("\t}\n")
 }
 
 func (ig *injectorGen) fieldExpr(lname string, c *call) {
