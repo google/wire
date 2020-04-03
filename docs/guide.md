@@ -466,53 +466,175 @@ func injectFoo() Foo {
 
 ### Slice of provide
 
+`wire.Slice` func support `wire.NewSet`, `wire.Value`, `wire.Struct` and func provider as parameter.
+
+**`main.go`**
+
 ```go
-type Controller interface {
-	InitRouter(router *mux.Router)
-}
+package main
 
-type HomeController struct {}
+import (
+	"fmt"
+	"net/http"
+)
 
-func NewHomeController() *HomeController {
+type HomeController struct{}
+
+func NewHome() *HomeController {
 	return &HomeController{}
 }
 
-func (c *HomeController) InitRouter(router *mux.Router)  {
-	router.HandleFunc("/", c.Home)
+func (c *HomeController) InitRouter(mux *http.ServeMux) {
+	mux.HandleFunc("/", c.home)
 }
 
-func (c *HomeController) Home(w http.ResponseWriter, r *http.Request)  {
+func (c *HomeController) home(w http.ResponseWriter, r *http.Request) {
+	_, _ = fmt.Fprintf(w, "home")
+}
+
+type DocController struct{}
+
+func (c DocController) InitRouter(router *http.ServeMux) {
+	router.HandleFunc("/doc", c.Home)
+}
+
+func (c DocController) Home(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprint(w, "OK")
 }
 
-func InitRouter(handles ...types.Controller) *mux.Router {
-	router := mux.NewRouter()
-	for _, h := range handles {
-		h.InitRouter(router)
-	}
-	return router
+type UploadController struct{}
+
+func NewUpload() *UploadController {
+	return &UploadController{}
 }
 
-func NewRouter() *mux.Router {
-    panic(wire.Build(
-        InitRouter,
-        wire.Slice(
-            []Controller(nil),
-            NewHomeController,
-        ),
-    ))
+func (c *UploadController) InitRouter(mux *http.ServeMux) {
+	mux.HandleFunc("/upload", c.upload)
+}
+
+func (c *UploadController) upload(w http.ResponseWriter, r *http.Request) {
+	_, _ = fmt.Fprintf(w, "home")
+}
+
+type Controller interface {
+	InitRouter(*http.ServeMux)
+}
+
+type Mux struct {
+	Handlers []Controller
+}
+
+func InitRouter(handlers []Controller) *Mux {
+	return &Mux{Handlers: handlers}
+}
+
+func main() {
+	router := NewRouter()
+	fmt.Println(len(router.Handlers))
 }
 ```
 
-gen to:
+
+**func provider:**
+```go
+func NewRouter() *Mux {
+	panic(
+		wire.Build(
+			InitRouter,
+			wire.Slice(
+				[]Controller(nil),
+				NewHome,
+				NewUpload,
+			),
+		),
+	)
+}
+```
+
+
+Generated as:
 
 ```go
-func NewRouter() *mux.Router {
-    homeController := NewHomeController()
-    v := []Controller{
-        homeController,
-    }
-    router := InitRouter(v...)
-    return router
+func NewRouter() *Mux {
+	homeController := NewHome()
+	uploadController := NewUpload()
+	v := []Controller{
+		homeController,
+		uploadController,
+	}
+	mux := InitRouter(v)
+	return mux
 }
+```
+
+**Set:**
+```go
+func NewRouter() *Mux {
+	panic(
+		wire.Build(
+			InitRouter,
+			wire.Slice(
+				[]Controller(nil),
+				wire.NewSet(
+					NewHome,
+					NewUpload,
+				),
+			),
+		),
+	)
+}
+```
+
+Generated as:
+
+```go
+func NewRouter() *Mux {
+	homeController := NewHome()
+	uploadController := NewUpload()
+	v := []Controller{
+		homeController,
+		uploadController,
+	}
+	mux := InitRouter(v)
+	return mux
+}
+```
+
+**Value || Struct**
+
+```go
+func NewRouter() *Mux {
+	panic(
+		wire.Build(
+			InitRouter,
+			wire.Slice(
+				[]Controller(nil),
+				wire.Value(&HomeController{}),
+				wire.Struct(new(UploadController), "*"),
+				wire.Struct(new(DocController), "*"),
+			),
+		),
+	)
+}
+```
+
+Generated as:
+
+```go
+func NewRouter() *Mux {
+	homeController := _wireHomeControllerValue
+	uploadController := &UploadController{}
+	docController := DocController{}
+	v := []Controller{
+		homeController,
+		uploadController,
+		docController,
+	}
+	mux := InitRouter(v)
+	return mux
+}
+
+var (
+	_wireHomeControllerValue = &HomeController{}
+)
 ```
