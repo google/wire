@@ -484,24 +484,33 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 		}
 		providerMap.Set(s.Iface, &ProvidedType{t: s.Iface, s: s})
 		srcMap.Set(s.Iface, src)
-		// slice deps args
-		//for _, p := range s.Args {
-		//	src := &providerSetSrc{Provider: p}
-		//	for _, typ := range p.Type {
-		//		if prevSrc := srcMap.At(typ); prevSrc != nil {
-		//			ec.add(bindingConflictError(fset, typ, set, src, prevSrc.(*providerSetSrc)))
-		//			continue
-		//		}
-		//		providerMap.Set(typ, &ProvidedType{t: typ, p: p})
-		//		srcMap.Set(typ, src)
-		//	}
-		//}
 	}
 
 	if len(ec.errors) > 0 {
 		return nil, nil, ec.errors
 	}
 	return providerMap, srcMap, nil
+}
+
+// printfAcyclic printf cycle to ec
+func printfAcyclic(providerMap *typeutil.Map, ec *errorCollector, curr []types.Type, start int, a types.Type) {
+	sb := new(strings.Builder)
+	_, _ = fmt.Fprintf(sb, "cycle for %s:\n", types.TypeString(a, nil))
+	for j := start; j < len(curr); j++ {
+		t := providerMap.At(curr[j]).(*ProvidedType)
+		if t.IsProvider() {
+			p := t.Provider()
+			_, _ = fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Pkg.Path(), p.Name)
+		} else if t.IsSlice() {
+			s := t.Slice()
+			_, _ = fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), s.Pkg.Path(), s.Name)
+		} else {
+			p := t.Field()
+			_, _ = fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Parent, p.Name)
+		}
+	}
+	_, _ = fmt.Fprintf(sb, "%s", types.TypeString(a, nil))
+	ec.add(errors.New(sb.String()))
 }
 
 func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
@@ -551,20 +560,7 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 					hasCycle := false
 					for i, b := range curr {
 						if types.Identical(a, b) {
-							sb := new(strings.Builder)
-							fmt.Fprintf(sb, "cycle for %s:\n", types.TypeString(a, nil))
-							for j := i; j < len(curr); j++ {
-								t := providerMap.At(curr[j]).(*ProvidedType)
-								if t.IsProvider() {
-									p := t.Provider()
-									fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Pkg.Path(), p.Name)
-								} else {
-									p := t.Field()
-									fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Parent, p.Name)
-								}
-							}
-							fmt.Fprintf(sb, "%s", types.TypeString(a, nil))
-							ec.add(errors.New(sb.String()))
+							printfAcyclic(providerMap, ec, curr, i, a)
 							hasCycle = true
 							break
 						}
@@ -575,7 +571,25 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 					}
 				}
 			case pt.IsSlice():
-				// Todo slice cycle
+				// E.g: controller -> service -> []slice -> controller
+				var args []types.Type
+				for _, arg := range pt.Slice().Args {
+					args = append(args, arg.Type)
+				}
+				for _, a := range args {
+					hasCycle := false
+					for i, b := range curr {
+						if types.Identical(a, b) {
+							printfAcyclic(providerMap, ec, curr, i, a)
+							hasCycle = true
+							break
+						}
+					}
+					if !hasCycle {
+						next := append(append([]types.Type(nil), curr...), a)
+						stk = append(stk, next)
+					}
+				}
 			default:
 				panic("invalid provider map value")
 			}

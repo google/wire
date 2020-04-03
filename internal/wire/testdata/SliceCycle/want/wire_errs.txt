@@ -1,0 +1,5 @@
+example.com/foo/wire.go:x:y: cycle for *example.com/foo.HomeController:
+*example.com/foo.HomeController (example.com/foo.NewHome) ->
+*example.com/foo.RouterService (example.com/foo.NewRouterService) ->
+[]example.com/foo.Controller (example.com/foo.Controller) ->
+*example.com/foo.HomeController
