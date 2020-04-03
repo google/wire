@@ -13,9 +13,9 @@ func NewRouter() *Mux {
 			wire.Slice(
 				[]Controller(nil),
 				wire.Struct(new(HomeController), "*"),
+				wire.Struct(new(DocController), "*"),
 				wire.Value(&UploadController{}),
 			),
 		),
 	)
 }
-

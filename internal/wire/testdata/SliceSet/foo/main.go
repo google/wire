@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-var Set = wire.NewSet(NewHome, NewUpload)
+var Set = wire.NewSet(NewHome)
 
 type Controller interface {
 	InitRouter(*http.ServeMux)

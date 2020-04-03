@@ -7,7 +7,6 @@ import (
 
 type UploadController struct{}
 
-
 func (c *UploadController) InitRouter(mux *http.ServeMux) {
 	mux.HandleFunc("/upload", c.upload)
 }

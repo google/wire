@@ -9,9 +9,11 @@ package main
 
 func NewRouter() *Mux {
 	homeController := &HomeController{}
+	docController := DocController{}
 	uploadController := _wireUploadControllerValue
 	v := []Controller{
 		homeController,
+		docController,
 		uploadController,
 	}
 	mux := InitRouter(v)

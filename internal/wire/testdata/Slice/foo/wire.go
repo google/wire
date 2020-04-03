@@ -18,4 +18,3 @@ func NewRouter() *Mux {
 		),
 	)
 }
-

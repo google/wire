@@ -985,7 +985,7 @@ func (oc *objectCache) processSlice(fset *token.FileSet, info *types.Info, call 
 		var typ types.Type
 		switch item := item.(type) {
 		case *Provider:
-			if item.IsStruct {
+			if item.IsStruct && !types.Implements(item.Out[0], ifaceType) {
 				typ = item.Out[1]
 			} else {
 				typ = item.Out[0]
