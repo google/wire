@@ -148,8 +148,10 @@ type IfaceBinding struct {
 }
 
 type Slice struct {
-	Iface     types.Type
-	Providers []*Provider
+	Iface  types.Type
+	Args   []ProviderInput
+	Inputs []interface{}
+	//Providers []*Provider
 	// Pos is the position where the binding was declared.
 	Pos  token.Pos
 	Pkg  *types.Package
@@ -587,7 +589,7 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 			}
 			return v, nil
 		case "Slice":
-			v, err := oc.processSlice(oc.fset, info, call, pkgPath)
+			v, err := oc.processSlice(oc.fset, info, call, pkgPath, varName)
 			if err != nil {
 				return nil, []error{notePosition(exprPos, err)}
 			}
@@ -606,6 +608,30 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 	return nil, []error{notePosition(exprPos, errors.New("unknown pattern"))}
 }
 
+func addendSet(pset *ProviderSet, item interface{}) {
+	switch item := item.(type) {
+	case *Provider:
+		pset.Providers = append(pset.Providers, item)
+	case *ProviderSet:
+		pset.Imports = append(pset.Imports, item)
+	case *IfaceBinding:
+		pset.Bindings = append(pset.Bindings, item)
+	case *Value:
+		pset.Values = append(pset.Values, item)
+	case []*Field:
+		pset.Fields = append(pset.Fields, item...)
+	case *Slice:
+		pset.Slices = append(pset.Slices, item)
+		// recursive add slice args provider
+		for _, i := range item.Inputs {
+			addendSet(pset, i)
+		}
+		item.Inputs = nil
+	default:
+		panic("unknown item type")
+	}
+}
+
 func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast.CallExpr, args *InjectorArgs, varName string) (*ProviderSet, []error) {
 	// Assumes that call.Fun is wire.NewSet or wire.Build.
 
@@ -622,22 +648,7 @@ func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast
 			ec.add(errs...)
 			continue
 		}
-		switch item := item.(type) {
-		case *Provider:
-			pset.Providers = append(pset.Providers, item)
-		case *ProviderSet:
-			pset.Imports = append(pset.Imports, item)
-		case *IfaceBinding:
-			pset.Bindings = append(pset.Bindings, item)
-		case *Value:
-			pset.Values = append(pset.Values, item)
-		case []*Field:
-			pset.Fields = append(pset.Fields, item...)
-		case *Slice:
-			pset.Slices = append(pset.Slices, item)
-		default:
-			panic("unknown item type")
-		}
+		addendSet(pset, item)
 	}
 	if len(ec.errors) > 0 {
 		return nil, ec.errors
@@ -944,7 +955,7 @@ func processBind(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*If
 	}, nil
 }
 
-func (oc *objectCache) processSlice(fset *token.FileSet, info *types.Info, call *ast.CallExpr, pkgPath string) (*Slice, error) {
+func (oc *objectCache) processSlice(fset *token.FileSet, info *types.Info, call *ast.CallExpr, pkgPath, varName string) (*Slice, error) {
 	if len(call.Args) < 2 {
 		return nil, notePosition(fset.Position(call.Pos()),
 			errors.New("call to Slice takes greater or equal to two arguments"))
@@ -959,22 +970,45 @@ func (oc *objectCache) processSlice(fset *token.FileSet, info *types.Info, call 
 	ifaceType := ifaceNameType.Underlying().(*types.Interface)
 	ifaceObj := ifaceNameType.Obj()
 	slice := &Slice{
-		Pkg:       ifaceObj.Pkg(),
-		Name:      ifaceObj.Name(),
-		Iface:     ifaceSliceType,
-		Providers: nil,
-		Pos:       call.Pos(),
+		Pkg:    ifaceObj.Pkg(),
+		Name:   ifaceObj.Name(),
+		Iface:  ifaceSliceType,
+		Args:   nil,
+		Inputs: nil,
+		Pos:    call.Pos(),
 	}
 	for i := 1; i < len(call.Args); i++ {
-		item, errs := oc.processExpr(info, pkgPath, call.Args[i], "")
+		item, errs := oc.processExpr(info, pkgPath, call.Args[i], varName)
 		if len(errs) > 0 {
 			return nil, errs[0]
 		}
+		var typ types.Type
 		switch item := item.(type) {
 		case *Provider:
-			typ := item.Out[0]
+			if item.IsStruct {
+				typ = item.Out[1]
+			} else {
+				typ = item.Out[0]
+			}
+		case *Value:
+			typ = item.Out
+		case *ProviderSet:
+			item.providerMap.Iterate(func(key types.Type, value interface{}) {
+				slice.Args = append(slice.Args, ProviderInput{
+					Type: key,
+				})
+			})
+			slice.Inputs = append(slice.Inputs, item)
+		// Todo more expr support
+		default:
+			return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("unknown item type: %s", item))
+		}
+		if typ != nil {
 			if types.Implements(typ, ifaceType) {
-				slice.Providers = append(slice.Providers, item)
+				slice.Args = append(slice.Args, ProviderInput{
+					Type: typ,
+				})
+				slice.Inputs = append(slice.Inputs, item)
 			} else {
 				return nil, notePosition(
 					fset.Position(call.Pos()),
@@ -985,9 +1019,6 @@ func (oc *objectCache) processSlice(fset *token.FileSet, info *types.Info, call 
 					),
 				)
 			}
-		// Todo more expr support
-		default:
-			return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("unknown item type: %s", item))
 		}
 	}
 

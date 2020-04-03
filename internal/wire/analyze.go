@@ -248,25 +248,25 @@ dfs:
 			// slice provider
 			s := pv.s
 			visitedProviders := true
-			for i := len(s.Providers) - 1; i >= 0; i-- {
-				a := s.Providers[i]
-				if index.At(a.Out[0]) == nil {
+			for i := len(s.Args) - 1; i >= 0; i-- {
+				a := s.Args[i]
+				if index.At(a.Type) == nil {
 					if visitedProviders {
 						// Make sure to re-visit this type after visiting all arguments.
 						stk = append(stk, curr)
 						visitedProviders = false
 					}
-					stk = append(stk, frame{t: a.Out[0], from: curr.t, up: &curr})
+					stk = append(stk, frame{t: a.Type, from: curr.t, up: &curr})
 				}
 			}
 			if !visitedProviders {
 				continue
 			}
-			args := make([]int, len(s.Providers))
-			ins := make([]types.Type, len(s.Providers))
-			for i := range s.Providers {
-				ins[i] = s.Providers[i].Out[0]
-				v := index.At(s.Providers[i].Out[0])
+			args := make([]int, len(s.Args))
+			ins := make([]types.Type, len(s.Args))
+			for i := range s.Args {
+				ins[i] = s.Args[i].Type
+				v := index.At(s.Args[i].Type)
 				if v == errAbort {
 					index.Set(curr.t, errAbort)
 					continue dfs
@@ -485,17 +485,17 @@ func buildProviderMap(fset *token.FileSet, hasher typeutil.Hasher, set *Provider
 		providerMap.Set(s.Iface, &ProvidedType{t: s.Iface, s: s})
 		srcMap.Set(s.Iface, src)
 		// slice deps args
-		for _, p := range s.Providers {
-			src := &providerSetSrc{Provider: p}
-			for _, typ := range p.Out {
-				if prevSrc := srcMap.At(typ); prevSrc != nil {
-					ec.add(bindingConflictError(fset, typ, set, src, prevSrc.(*providerSetSrc)))
-					continue
-				}
-				providerMap.Set(typ, &ProvidedType{t: typ, p: p})
-				srcMap.Set(typ, src)
-			}
-		}
+		//for _, p := range s.Args {
+		//	src := &providerSetSrc{Provider: p}
+		//	for _, typ := range p.Type {
+		//		if prevSrc := srcMap.At(typ); prevSrc != nil {
+		//			ec.add(bindingConflictError(fset, typ, set, src, prevSrc.(*providerSetSrc)))
+		//			continue
+		//		}
+		//		providerMap.Set(typ, &ProvidedType{t: typ, p: p})
+		//		srcMap.Set(typ, src)
+		//	}
+		//}
 	}
 
 	if len(ec.errors) > 0 {
