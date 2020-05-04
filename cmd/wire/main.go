@@ -399,9 +399,7 @@ func gather(info *wire.Info, key wire.ProviderSetID) (_ []outGroup, imports map[
 		if curr.VarName != "" && !(curr.PkgPath == key.ImportPath && curr.VarName == key.VarName) {
 			imports[formatProviderSetName(curr.PkgPath, curr.VarName)] = struct{}{}
 		}
-		for _, imp := range curr.Imports {
-			next = append(next, imp)
-		}
+		next = append(next, curr.Imports...)
 	}
 
 	// Depth-first search to build groups.
