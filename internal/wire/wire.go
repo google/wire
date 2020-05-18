@@ -769,16 +769,6 @@ func (ig *injectorGen) p(format string, args ...interface{}) {
 	ig.g.p(format, args...)
 }
 
-func (ig *injectorGen) writeAST(info *types.Info, node ast.Node) {
-	node = ig.g.rewritePkgRefs(info, node)
-	if ig.discard {
-		return
-	}
-	if err := printer.Fprint(&ig.g.buf, ig.g.pkg.Fset, node); err != nil {
-		panic(err)
-	}
-}
-
 // zeroValue returns the shortest expression that evaluates to the zero
 // value for the given type.
 func zeroValue(t types.Type, qf types.Qualifier) string {
