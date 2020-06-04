@@ -100,6 +100,7 @@ func newGenerateOptions(headerFile string) (*wire.GenerateOptions, error) {
 type genCmd struct {
 	headerFile     string
 	prefixFileName string
+	tags           string
 }
 
 func (*genCmd) Name() string { return "gen" }
@@ -117,6 +118,7 @@ func (*genCmd) Usage() string {
 func (cmd *genCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&cmd.headerFile, "header_file", "", "path to file to insert as a header in wire_gen.go")
 	f.StringVar(&cmd.prefixFileName, "output_file_prefix", "", "string to prepend to output file names.")
+	f.StringVar(&cmd.tags, "tags", "", "append build tags to the default wirebuild")
 }
 
 func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -132,6 +134,7 @@ func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	}
 
 	opts.PrefixOutputFile = cmd.prefixFileName
+	opts.Tags = cmd.tags
 
 	outs, errs := wire.Generate(ctx, wd, os.Environ(), packages(f), opts)
 	if len(errs) > 0 {
@@ -169,6 +172,7 @@ func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 
 type diffCmd struct {
 	headerFile string
+	tags       string
 }
 
 func (*diffCmd) Name() string { return "diff" }
@@ -189,6 +193,7 @@ func (*diffCmd) Usage() string {
 }
 func (cmd *diffCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&cmd.headerFile, "header_file", "", "path to file to insert as a header in wire_gen.go")
+	f.StringVar(&cmd.tags, "tags", "", "append build tags to the default wirebuild")
 }
 func (cmd *diffCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	const (
@@ -205,6 +210,8 @@ func (cmd *diffCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		log.Println(err)
 		return subcommands.ExitFailure
 	}
+
+	opts.Tags = cmd.tags
 
 	outs, errs := wire.Generate(ctx, wd, os.Environ(), packages(f), opts)
 	if len(errs) > 0 {
@@ -253,7 +260,9 @@ func (cmd *diffCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	return subcommands.ExitSuccess
 }
 
-type showCmd struct{}
+type showCmd struct {
+	tags string
+}
 
 func (*showCmd) Name() string { return "show" }
 func (*showCmd) Synopsis() string {
@@ -270,14 +279,16 @@ func (*showCmd) Usage() string {
   If no packages are listed, it defaults to ".".
 `
 }
-func (*showCmd) SetFlags(_ *flag.FlagSet) {}
-func (*showCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (cmd *showCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&cmd.tags, "tags", "", "append build tags to the default wirebuild")
+}
+func (cmd *showCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Println("failed to get working directory: ", err)
 		return subcommands.ExitFailure
 	}
-	info, errs := wire.Load(ctx, wd, os.Environ(), packages(f))
+	info, errs := wire.Load(ctx, wd, os.Environ(), packages(f), cmd.tags)
 	if info != nil {
 		keys := make([]wire.ProviderSetID, 0, len(info.Sets))
 		for k := range info.Sets {
@@ -341,14 +352,16 @@ func (*showCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	return subcommands.ExitSuccess
 }
 
-type checkCmd struct{}
+type checkCmd struct {
+	tags string
+}
 
 func (*checkCmd) Name() string { return "check" }
 func (*checkCmd) Synopsis() string {
 	return "print any Wire errors found"
 }
 func (*checkCmd) Usage() string {
-	return `check [packages]
+	return `check [-tags tag,list] [packages]
 
   Given one or more packages, check prints any type-checking or Wire errors
   found with top-level variable provider sets or injector functions.
@@ -356,14 +369,16 @@ func (*checkCmd) Usage() string {
   If no packages are listed, it defaults to ".".
 `
 }
-func (*checkCmd) SetFlags(_ *flag.FlagSet) {}
-func (*checkCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (cmd *checkCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&cmd.tags, "tags", "", "append build tags to the default wirebuild")
+}
+func (cmd *checkCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Println("failed to get working directory: ", err)
 		return subcommands.ExitFailure
 	}
-	_, errs := wire.Load(ctx, wd, os.Environ(), packages(f))
+	_, errs := wire.Load(ctx, wd, os.Environ(), packages(f), cmd.tags)
 	if len(errs) > 0 {
 		logErrors(errs)
 		log.Println("error loading packages")

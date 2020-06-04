@@ -248,8 +248,8 @@ type Field struct {
 // env is nil or empty, it is interpreted as an empty set of variables.
 // In case of duplicate environment variables, the last one in the list
 // takes precedence.
-func Load(ctx context.Context, wd string, env []string, patterns []string) (*Info, []error) {
-	pkgs, errs := load(ctx, wd, env, patterns)
+func Load(ctx context.Context, wd string, env []string, patterns []string, tags string) (*Info, []error) {
+	pkgs, errs := load(ctx, wd, env, patterns, tags)
 	if len(errs) > 0 {
 		return nil, errs
 	}
@@ -349,7 +349,7 @@ func Load(ctx context.Context, wd string, env []string, patterns []string) (*Inf
 // env is nil or empty, it is interpreted as an empty set of variables.
 // In case of duplicate environment variables, the last one in the list
 // takes precedence.
-func load(ctx context.Context, wd string, env []string, patterns []string) ([]*packages.Package, []error) {
+func load(ctx context.Context, wd string, env []string, patterns []string, tags string) ([]*packages.Package, []error) {
 	cfg := &packages.Config{
 		Context:    ctx,
 		Mode:       packages.LoadAllSyntax,
@@ -357,6 +357,9 @@ func load(ctx context.Context, wd string, env []string, patterns []string) ([]*p
 		Env:        env,
 		BuildFlags: []string{"-tags=wireinject"},
 		// TODO(light): Use ParseFile to skip function bodies and comments in indirect packages.
+	}
+	if len(tags) > 0 {
+		cfg.BuildFlags[0] += " " + tags
 	}
 	escaped := make([]string, len(patterns))
 	for i := range patterns {
