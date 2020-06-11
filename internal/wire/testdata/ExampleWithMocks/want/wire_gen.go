@@ -7,6 +7,7 @@ package main
 
 // Injectors from wire.go:
 
+// initApp returns a real app.
 func initApp() *app {
 	mainTimer := _wireRealTimeValue
 	mainGreeter := greeter{
@@ -22,6 +23,9 @@ var (
 	_wireRealTimeValue = realTime{}
 )
 
+// initMockedAppFromArgs returns an app with mocked dependencies provided via
+// arguments (Approach A). Note that the argument's type is the interface
+// type (timer), but the concrete mock type should be passed.
 func initMockedAppFromArgs(mt timer) *app {
 	mainGreeter := greeter{
 		T: mt,
@@ -32,6 +36,8 @@ func initMockedAppFromArgs(mt timer) *app {
 	return mainApp
 }
 
+// initMockedApp returns an app with its mocked dependencies, created
+// via providers (Approach B).
 func initMockedApp() *appWithMocks {
 	mainMockTimer := newMockTimer()
 	mainGreeter := greeter{
