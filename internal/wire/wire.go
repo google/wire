@@ -179,7 +179,7 @@ func generateInjectors(g *gen, pkg *packages.Package) (injectorFiles []*ast.File
 				ec.add(notePositionAll(g.pkg.Fset.Position(fn.Pos()), errs)...)
 				continue
 			}
-			if errs := g.inject(fn.Pos(), fn.Name.Name, sig, set); len(errs) > 0 {
+			if errs := g.inject(fn.Pos(), fn.Name.Name, sig, set, fn.Doc); len(errs) > 0 {
 				ec.add(errs...)
 				continue
 			}
@@ -304,7 +304,7 @@ func (g *gen) frame() []byte {
 }
 
 // inject emits the code for an injector.
-func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *ProviderSet) []error {
+func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *ProviderSet, doc *ast.CommentGroup) []error {
 	injectSig, err := funcOutput(sig)
 	if err != nil {
 		return []error{notePosition(g.pkg.Fset.Position(pos),
@@ -367,12 +367,12 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 	}
 
 	// Perform one pass to collect all imports, followed by the real pass.
-	injectPass(name, sig, calls, set, &injectorGen{
+	injectPass(name, sig, calls, set, doc, &injectorGen{
 		g:       g,
 		errVar:  disambiguate("err", g.nameInFileScope),
 		discard: true,
 	})
-	injectPass(name, sig, calls, set, &injectorGen{
+	injectPass(name, sig, calls, set, doc, &injectorGen{
 		g:       g,
 		errVar:  disambiguate("err", g.nameInFileScope),
 		discard: false,
@@ -586,12 +586,17 @@ type injectorGen struct {
 
 // injectPass generates an injector given the output from analysis.
 // The sig passed in should be verified.
-func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSet, ig *injectorGen) {
+func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSet, doc *ast.CommentGroup, ig *injectorGen) {
 	params := sig.Params()
 	injectSig, err := funcOutput(sig)
 	if err != nil {
 		// This should be checked by the caller already.
 		panic(err)
+	}
+	if doc != nil {
+		for _, c := range doc.List {
+			ig.p("%s\n", c.Text)
+		}
 	}
 	ig.p("func %s(", name)
 	for i := 0; i < params.Len(); i++ {
