@@ -395,7 +395,7 @@ func provideFoo() Foo {
 func injectedMessage() string {
     wire.Build(
         provideFoo,
-        getS,
+        getS)
     return ""
 }
 ```
