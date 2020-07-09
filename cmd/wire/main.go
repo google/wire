@@ -288,7 +288,7 @@ func (cmd *showCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		log.Println("failed to get working directory: ", err)
 		return subcommands.ExitFailure
 	}
-	info, errs := wire.Load(ctx, wd, os.Environ(), packages(f), cmd.tags)
+	info, errs := wire.Load(ctx, wd, os.Environ(), cmd.tags, packages(f))
 	if info != nil {
 		keys := make([]wire.ProviderSetID, 0, len(info.Sets))
 		for k := range info.Sets {
@@ -378,7 +378,7 @@ func (cmd *checkCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 		log.Println("failed to get working directory: ", err)
 		return subcommands.ExitFailure
 	}
-	_, errs := wire.Load(ctx, wd, os.Environ(), packages(f), cmd.tags)
+	_, errs := wire.Load(ctx, wd, os.Environ(), cmd.tags, packages(f))
 	if len(errs) > 0 {
 		logErrors(errs)
 		log.Println("error loading packages")

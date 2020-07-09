@@ -248,8 +248,8 @@ type Field struct {
 // env is nil or empty, it is interpreted as an empty set of variables.
 // In case of duplicate environment variables, the last one in the list
 // takes precedence.
-func Load(ctx context.Context, wd string, env []string, patterns []string, tags string) (*Info, []error) {
-	pkgs, errs := load(ctx, wd, env, patterns, tags)
+func Load(ctx context.Context, wd string, env []string, tags string, patterns []string) (*Info, []error) {
+	pkgs, errs := load(ctx, wd, env, tags, patterns)
 	if len(errs) > 0 {
 		return nil, errs
 	}
@@ -349,7 +349,7 @@ func Load(ctx context.Context, wd string, env []string, patterns []string, tags 
 // env is nil or empty, it is interpreted as an empty set of variables.
 // In case of duplicate environment variables, the last one in the list
 // takes precedence.
-func load(ctx context.Context, wd string, env []string, patterns []string, tags string) ([]*packages.Package, []error) {
+func load(ctx context.Context, wd string, env []string, tags string, patterns []string) ([]*packages.Package, []error) {
 	cfg := &packages.Config{
 		Context:    ctx,
 		Mode:       packages.LoadAllSyntax,
