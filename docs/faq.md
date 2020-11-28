@@ -105,6 +105,17 @@ subtract command][] would automate the toil in this process.
 
 [proposed subtract command]: https://github.com/google/wire/issues/8
 
+## Why does Wire require explicitly declaring a type provides an interface type?
+
+The reason the binding is explicit is to avoid scenarios where adding a new type
+to the provider graph that implements the same interface causes the graph to
+break, because that can be surprising. While this does result in more typing,
+the end-effect is that the developer's intent is more explicit in the code,
+which we felt was most consistent with the Go philosophy.
+
+There is an [open issue](https://github.com/google/wire/issues/242) to consider
+improving this.
+
 ## Should I use Wire for small applications?
 
 Probably not. Wire is designed to automate more intricate setup code found in
