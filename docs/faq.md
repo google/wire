@@ -105,7 +105,7 @@ subtract command][] would automate the toil in this process.
 
 [proposed subtract command]: https://github.com/google/wire/issues/8
 
-## Why does Wire require explicitly declaring a type provides an interface type?
+## Why does Wire require explicitly declare that a type provides an interface type?
 
 The reason the binding is explicit is to avoid scenarios where adding a new type
 to the provider graph that implements the same interface causes the graph to
