@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary")
+load("@rules_pkg//:pkg.bzl", "pkg_tar", "pkg_zip")
+
+go_binary(
+    name = "wire",
+    embed = ["//cmd/wire:wire_lib"],
+    goarch = "amd64",
+    goos = "darwin",
+    visibility = [":__subpackages__"],
+)
+
+pkg_tar(
+    name = "amd64_tar_gz",
+    srcs = [
+        ":wire",
+    ],
+    extension = "tar.gz",
+    package_base = "",
+    package_dir = "/",
+    package_file_name = "wire-VERSION-darwin-amd64.tar.gz",
+    visibility = [":__subpackages__"],
+)
+
+pkg_zip(
+    name = "amd64_zip",
+    srcs = [
+        ":wire",
+    ],
+    visibility = [":__subpackages__"],
+)
+
+filegroup(
+    name = "amd64",
+    srcs = [
+        ":amd64_tar_gz",
+        ":amd64_zip",
+    ],
+    visibility = ["//release:__subpackages__"],
+)

@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_test(
+    name = "lib_test",
+    srcs = ["wire_test.go"],
+    embed = [":go_default_library"],
+    deps = ["@com_github_google_go_cmp//cmp"],
+)
+
+go_library(
+    name = "wire",
+    srcs = [
+        "analyze.go",
+        "copyast.go",
+        "errors.go",
+        "parse.go",
+        "wire.go",
+    ],
+    importpath = "github.com/google/wire/internal/wire",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@org_golang_x_tools//go/ast/astutil",
+        "@org_golang_x_tools//go/packages",
+        "@org_golang_x_tools//go/types/typeutil",
+    ],
+)
