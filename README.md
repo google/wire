@@ -52,7 +52,7 @@ reports and fixes.
 
 ## Community
 
-For questions, please open [an issue](https://github.com/google/wire/issues).
+For questions, please use [GitHub Discussions](https://github.com/google/wire/discussions).
 
 This project is covered by the Go [Code of Conduct][].
 
