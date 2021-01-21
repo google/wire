@@ -1,0 +1,6 @@
+*
+!/cmd
+!/internal
+!/bin/wire
+!go.mod
+!go.sum

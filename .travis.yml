@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Need to build and push docker image
+services:
+  - docker
+
 language: go
 go_import_path: github.com/google/wire
 
@@ -51,3 +55,13 @@ jobs:
       os: osx
     - go: "1.13.x"
       os: windows
+    # Build docker image for tags
+    - stage: build image
+      go: "1.13"
+      env:
+        - DOCKER_TAG=${TRAVIS_TAG}
+      script:
+        - echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+        - docker build --build-arg GO_VERSION=${TRAVIS_GO_VERSION} -t ${TRAVIS_REPO_SLUG}:${DOCKER_TAG} -f ./build/docker/cmd/wire/Dockerfile .
+        - docker push ${TRAVIS_REPO_SLUG}:${DOCKER_TAG}
+      if: tag IS present
