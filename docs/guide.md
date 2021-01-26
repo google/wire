@@ -165,7 +165,7 @@ func initializeBaz(ctx context.Context) (foobarbaz.Baz, error) {
     bar := foobarbaz.ProvideBar(foo)
     baz, err := foobarbaz.ProvideBaz(ctx, bar)
     if err != nil {
-        return 0, err
+        return foobarbaz.Baz{}, err
     }
     return baz, nil
 }
