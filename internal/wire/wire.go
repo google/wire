@@ -31,6 +31,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"unicode"
 	"unicode/utf8"
 
@@ -66,6 +67,9 @@ type GenerateOptions struct {
 	Header           []byte
 	PrefixOutputFile string
 	Tags             string
+
+	// If set, overrides default format of output file paths.
+	OutputPathTemplate *template.Template
 }
 
 // Generate performs dependency injection for the packages that match the given
@@ -91,12 +95,12 @@ func Generate(ctx context.Context, wd string, env []string, patterns []string, o
 	generated := make([]GenerateResult, len(pkgs))
 	for i, pkg := range pkgs {
 		generated[i].PkgPath = pkg.PkgPath
-		outDir, err := detectOutputDir(pkg.GoFiles)
+		outputPath, err := pkgOutputPath(pkg, opts)
 		if err != nil {
 			generated[i].Errs = append(generated[i].Errs, err)
 			continue
 		}
-		generated[i].OutputPath = filepath.Join(outDir, opts.PrefixOutputFile+"wire_gen.go")
+		generated[i].OutputPath = outputPath
 		g := newGen(pkg)
 		injectorFiles, errs := generateInjectors(g, pkg)
 		if len(errs) > 0 {
@@ -119,6 +123,24 @@ func Generate(ctx context.Context, wd string, env []string, patterns []string, o
 		generated[i].Content = goSrc
 	}
 	return generated, nil
+}
+
+func pkgOutputPath(pkg *packages.Package, opts *GenerateOptions) (string, error) {
+	if tmpl := opts.OutputPathTemplate; tmpl != nil {
+		var buf strings.Builder
+		if err := tmpl.Execute(&buf, map[string]interface{}{
+			"PkgName": pkg.Name,
+			"PkgPath": pkg.PkgPath,
+		}); err != nil {
+			return "", err
+		}
+		return buf.String(), nil
+	}
+	outDir, err := detectOutputDir(pkg.GoFiles)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(outDir, opts.PrefixOutputFile+"wire_gen.go"), nil
 }
 
 func detectOutputDir(paths []string) (string, error) {

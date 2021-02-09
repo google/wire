@@ -26,10 +26,12 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"github.com/google/subcommands"
 	"github.com/google/wire/internal/wire"
@@ -101,6 +103,9 @@ type genCmd struct {
 	headerFile     string
 	prefixFileName string
 	tags           string
+	quiet          bool
+	relativeGopath string
+	outputPathTmpl string
 }
 
 func (*genCmd) Name() string { return "gen" }
@@ -119,6 +124,9 @@ func (cmd *genCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&cmd.headerFile, "header_file", "", "path to file to insert as a header in wire_gen.go")
 	f.StringVar(&cmd.prefixFileName, "output_file_prefix", "", "string to prepend to output file names.")
 	f.StringVar(&cmd.tags, "tags", "", "append build tags to the default wirebuild")
+	f.BoolVar(&cmd.quiet, "quiet", false, "don't emit output on success")
+	f.StringVar(&cmd.relativeGopath, "relative_gopath", "", "replaces $GOPATH when loading packages")
+	f.StringVar(&cmd.outputPathTmpl, "output_path_template", "", "template to use for output file paths")
 }
 
 func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -136,7 +144,37 @@ func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	opts.PrefixOutputFile = cmd.prefixFileName
 	opts.Tags = cmd.tags
 
-	outs, errs := wire.Generate(ctx, wd, os.Environ(), packages(f), opts)
+	if cmd.outputPathTmpl != "" {
+		tmpl, err := template.New("output_path_template").Parse(cmd.outputPathTmpl)
+		if err != nil {
+			log.Println(err)
+			return subcommands.ExitFailure
+		}
+		opts.OutputPathTemplate = tmpl
+	}
+
+	env := os.Environ()
+	if cmd.relativeGopath != "" {
+		setGopath := false
+		absGopath, err := filepath.Abs(cmd.relativeGopath)
+		if err != nil {
+			log.Println(err)
+			return subcommands.ExitFailure
+		}
+		adjustedGopath := "GOPATH=" + absGopath
+		for ii, val := range env {
+			if strings.HasPrefix(val, "GOPATH=") {
+				env[ii] = adjustedGopath
+				setGopath = true
+				break
+			}
+		}
+		if !setGopath {
+			env = append(env, adjustedGopath)
+		}
+	}
+
+	outs, errs := wire.Generate(ctx, wd, env, packages(f), opts)
 	if len(errs) > 0 {
 		logErrors(errs)
 		log.Println("generate failed")
@@ -157,7 +195,9 @@ func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 			continue
 		}
 		if err := out.Commit(); err == nil {
-			log.Printf("%s: wrote %s\n", out.PkgPath, out.OutputPath)
+			if !cmd.quiet {
+				log.Printf("%s: wrote %s\n", out.PkgPath, out.OutputPath)
+			}
 		} else {
 			log.Printf("%s: failed to write %s: %v\n", out.PkgPath, out.OutputPath, err)
 			success = false
