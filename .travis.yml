@@ -39,15 +39,13 @@ env:
   - GO111MODULE=on
   - GOPROXY=https://proxy.golang.org
 
-# When updating Go versions:
-# In addition to changing the "go:" versions below, edit the version
-# test in internal/runtests.sh.
-
 jobs:
   include:
-    - go: "1.13.x"
+    - go: "1.15.x"
       os: linux
-    - go: "1.13.x"
+    - go: "1.16.x"
+      os: linux
+    - go: "1.16.x"
       os: osx
-    - go: "1.13.x"
+    - go: "1.16.x"
       os: windows
