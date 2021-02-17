@@ -31,23 +31,19 @@ set -euo pipefail
 UPSTREAM_BRANCH="${TRAVIS_BRANCH:-master}"
 echo "Checking for incompatible API changes relative to ${UPSTREAM_BRANCH}..."
 
-INSTALL_DIR="$(mktemp -d)"
 MASTER_CLONE_DIR="$(mktemp -d)"
 PKGINFO_BRANCH=$(mktemp)
 PKGINFO_MASTER=$(mktemp)
 
 function cleanup() {
-  rm -rf "$INSTALL_DIR"
   rm -rf "$MASTER_CLONE_DIR"
   rm -f "$PKGINFO_BRANCH"
   rm -f "$PKGINFO_MASTER"
 }
 trap cleanup EXIT
 
-# Move to a temporary directory while installing apidiff to avoid changing
-# the local .mod file.
-( cd "$INSTALL_DIR" && exec go mod init unused )
-( cd "$INSTALL_DIR" && exec go install golang.org/x/exp/cmd/apidiff )
+# Install apidiff.
+go install golang.org/x/exp/cmd/apidiff@latest
 
 git clone -b "$UPSTREAM_BRANCH" . "$MASTER_CLONE_DIR" &> /dev/null
 
