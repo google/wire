@@ -41,16 +41,26 @@ if [[ "${TRAVIS_OS_NAME:-linux}" != "linux" ]]; then
   exit $result
 fi
 
-echo
-echo "Ensuring .go files are formatted with gofmt -s..."
-mapfile -t go_files < <(find . -name '*.go' -type f | grep -v testdata)
-DIFF="$(gofmt -s -d "${go_files[@]}")"
-if [ -n "$DIFF" ]; then
-  echo "FAIL: please run gofmt -s and commit the result"
-  echo "$DIFF";
-  result=1;
-else
-  echo "OK"
+# Update the regexp below when upgrading to a
+# new Go version. Some checks below we only run
+# for the latest Go version.
+latest_go_version=0
+if [[ $(go version) == *go1\.16* ]]; then
+  latest_go_version=1
+fi
+
+if [[ ${latest_go_version} -eq 1 ]]; then
+  echo
+  echo "Ensuring .go files are formatted with gofmt -s..."
+  mapfile -t go_files < <(find . -name '*.go' -type f | grep -v testdata)
+  DIFF="$(gofmt -s -d "${go_files[@]}")"
+  if [ -n "$DIFF" ]; then
+    echo "FAIL: please run gofmt -s and commit the result"
+    echo "$DIFF";
+    result=1;
+  else
+    echo "OK"
+  fi;
 fi;
 
 
@@ -59,13 +69,13 @@ fi;
 # ./internal/alldeps
 #
 # Whenever project dependencies change, rerun ./internal/listdeps.sh
-if [[ $(go version) == *go1\.12* ]]; then
+if [[ ${latest_go_version} -eq 1 ]]; then
   echo
   echo "Ensuring that there are no dependencies not listed in ./internal/alldeps..."
   (./internal/listdeps.sh | diff ./internal/alldeps - && echo "OK") || {
     echo "FAIL: dependencies changed; run: internal/listdeps.sh > internal/alldeps"
     # Module behavior may differ across versions.
-    echo "using go version 1.12."
+    echo "using the latest go version."
     result=1
   }
 fi
@@ -73,7 +83,7 @@ fi
 
 # For pull requests, check if there are undeclared incompatible API changes.
 # Skip this if we're already going to fail since it is expensive.
-if [[ ${result} -eq 0 ]] && [[ ! -z "${TRAVIS_BRANCH:-x}" ]] && [[ ! -z "${TRAVIS_PULL_REQUEST_SHA:-x}" ]]; then
+if [[ ${latest_go_version} -eq 1 ]] && [[ ${result} -eq 0 ]] && [[ ! -z "${TRAVIS_BRANCH:-x}" ]] && [[ ! -z "${TRAVIS_PULL_REQUEST_SHA:-x}" ]]; then
   echo
   ./internal/check_api_change.sh || result=1;
 fi

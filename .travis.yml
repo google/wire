@@ -40,6 +40,9 @@ env:
   - GOPROXY=https://proxy.golang.org
 
 jobs:
+  # When updating Go versions:
+  # In addition to changing the "go:" versions below, edit the version
+  # test in ./internal/runtests.sh.
   include:
     - go: "1.15.x"
       os: linux
