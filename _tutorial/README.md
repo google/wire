@@ -143,7 +143,7 @@ func InitializeEvent() Event {
 Rather than go through the trouble of initializing each component in turn and
 passing it into the next one, we instead have a single call to `wire.Build`
 passing in the initializers we want to use. In Wire, initializers are known as
-"providers," functions which provide a particular type. We add a zero value for
+"providers", functions which provide a particular type. We add a zero value for
 `Event` as a return value to satisfy the compiler. Note that even if we add
 values to `Event`, Wire will ignore them. In fact, the injector's purpose is to
 provide information about which providers to use to construct an `Event` and so
