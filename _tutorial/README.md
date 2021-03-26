@@ -157,7 +157,7 @@ the file:
 
 Note, a [build constraint][constraint] requires a blank, trailing line.
 
-In Wire parlance, `InitializeEvent` is an "injector." Now that we have our
+In Wire parlance, `InitializeEvent` is an "injector". Now that we have our
 injector complete, we are ready to use the `wire` command line tool.
 
 Install the tool with:
