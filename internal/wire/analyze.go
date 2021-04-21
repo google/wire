@@ -287,6 +287,18 @@ func verifyArgsUsed(set *ProviderSet, used []*providerSetSrc) []error {
 			errs = append(errs, fmt.Errorf("unused provider %q", p.Pkg.Name()+"."+p.Name))
 		}
 	}
+	for _, ab := range set.AutoBindings {
+		found := false
+		for _, u := range used {
+			if u.AutoBinding == ab {
+				found = true
+				break
+			}
+		}
+		if !found {
+			errs = append(errs, fmt.Errorf("unused auto binding %q", types.TypeString(ab.Concrete, nil)))
+		}
+	}
 	for _, v := range set.Values {
 		found := false
 		for _, u := range used {
@@ -458,49 +470,50 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 				continue
 			}
 			pt := x.(*ProvidedType)
+			var args []types.Type
 			switch {
 			case pt.IsValue():
 				// Leaf: values do not have dependencies.
 			case pt.IsArg():
 				// Injector arguments do not have dependencies.
-			case pt.IsProvider() || pt.IsField():
-				var args []types.Type
-				if pt.IsProvider() {
-					for _, arg := range pt.Provider().Args {
-						args = append(args, arg.Type)
-					}
-				} else {
-					args = append(args, pt.Field().Parent)
+			case pt.IsProvider():
+				for _, arg := range pt.Provider().Args {
+					args = append(args, arg.Type)
 				}
-				for _, a := range args {
-					hasCycle := false
-					for i, b := range curr {
-						if types.Identical(a, b) {
-							sb := new(strings.Builder)
-							fmt.Fprintf(sb, "cycle for %s:\n", types.TypeString(a, nil))
-							for j := i; j < len(curr); j++ {
-								t := providerMap.At(curr[j]).(*ProvidedType)
-								if t.IsProvider() {
-									p := t.Provider()
-									fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Pkg.Path(), p.Name)
-								} else {
-									p := t.Field()
-									fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Parent, p.Name)
-								}
-							}
-							fmt.Fprintf(sb, "%s", types.TypeString(a, nil))
-							ec.add(errors.New(sb.String()))
-							hasCycle = true
-							break
-						}
-					}
-					if !hasCycle {
-						next := append(append([]types.Type(nil), curr...), a)
-						stk = append(stk, next)
-					}
-				}
+			case pt.IsAutoBinding():
+				args = append(args, pt.AutoBinding().Concrete)
+			case pt.IsField():
+				args = append(args, pt.Field().Parent)
 			default:
 				panic("invalid provider map value")
+			}
+
+			for _, a := range args {
+				hasCycle := false
+				for i, b := range curr {
+					if types.Identical(a, b) {
+						sb := new(strings.Builder)
+						fmt.Fprintf(sb, "cycle for %s:\n", types.TypeString(a, nil))
+						for j := i; j < len(curr); j++ {
+							t := providerMap.At(curr[j]).(*ProvidedType)
+							if t.IsProvider() {
+								p := t.Provider()
+								fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Pkg.Path(), p.Name)
+							} else {
+								p := t.Field()
+								fmt.Fprintf(sb, "%s (%s.%s) ->\n", types.TypeString(curr[j], nil), p.Parent, p.Name)
+							}
+						}
+						fmt.Fprintf(sb, "%s", types.TypeString(a, nil))
+						ec.add(errors.New(sb.String()))
+						hasCycle = true
+						break
+					}
+				}
+				if !hasCycle {
+					next := append(append([]types.Type(nil), curr...), a)
+					stk = append(stk, next)
+				}
 			}
 		}
 	}
