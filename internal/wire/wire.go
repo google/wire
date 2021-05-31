@@ -523,6 +523,11 @@ func (g *gen) qualifiedID(pkgName, pkgPath, sym string) string {
 	if name == "" {
 		return sym
 	}
+	if strings.HasPrefix(sym, "(*") {
+		return sym[:2] + name + "." + sym[2:]
+	} else if strings.HasPrefix(sym, "(") {
+		return sym[:1] + name + "." + sym[1:]
+	}
 	return name + "." + sym
 }
 

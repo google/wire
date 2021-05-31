@@ -659,14 +659,21 @@ func qualifiedIdentObject(info *types.Info, expr ast.Expr) types.Object {
 	case *ast.Ident:
 		return info.ObjectOf(expr)
 	case *ast.SelectorExpr:
-		pkgName, ok := expr.X.(*ast.Ident)
-		if !ok {
-			return nil
+		switch value := expr.X.(type) {
+		case *ast.ParenExpr, *ast.SelectorExpr:
+			if selection, ok := info.Selections[expr]; !ok {
+				return nil
+			} else {
+				return selection.Obj()
+			}
+		case *ast.Ident:
+			pkgName := value
+			if _, ok := info.ObjectOf(pkgName).(*types.PkgName); !ok {
+				return nil
+			}
+			return info.ObjectOf(expr.Sel)
 		}
-		if _, ok := info.ObjectOf(pkgName).(*types.PkgName); !ok {
-			return nil
-		}
-		return info.ObjectOf(expr.Sel)
+		return nil
 	default:
 		return nil
 	}
@@ -699,6 +706,17 @@ func processFuncProvider(fset *token.FileSet, fn *types.Func) (*Provider, []erro
 			if types.Identical(provider.Args[i].Type, provider.Args[j].Type) {
 				return nil, []error{notePosition(fset.Position(fpos), fmt.Errorf("provider has multiple parameters of type %s", types.TypeString(provider.Args[j].Type, nil)))}
 			}
+		}
+	}
+	if recv := sig.Recv(); recv != nil {
+		switch typ := recv.Type().(type) {
+		case *types.Pointer:
+			elem := typ.Elem().(*types.Named)
+			provider.Name = fmt.Sprintf("(*%s).%s", elem.Obj().Name(), fn.Name())
+			provider.Args = append([]ProviderInput{{Type: typ}}, provider.Args...)
+		case *types.Named:
+			provider.Name = fmt.Sprintf("(%s).%s", typ.Obj().Name(), fn.Name())
+			provider.Args = append([]ProviderInput{{Type: typ}}, provider.Args...)
 		}
 	}
 	return provider, nil
