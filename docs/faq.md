@@ -119,7 +119,7 @@ improving this.
 ## Should I use Wire for small applications?
 
 Probably not. Wire is designed to automate more intricate setup code found in
-larger applications. For small applications, hand-wiring dependencies is
+larger applications. For small applications, hand-writing dependencies is
 simpler.
 
 ## Who is using Wire?
