@@ -24,7 +24,7 @@ fi
 # Run Go tests. Only do coverage for the Linux build
 # because it is slow, and codecov will only save the last one anyway.
 result=0
-if [[ "${TRAVIS_OS_NAME:-}" == "linux" ]]; then
+if [[ "${RUNNER_OS:-}" == "Linux" ]]; then
   echo "Running Go tests (with coverage)..."
   go test -mod=readonly -race -coverpkg=./... -coverprofile=coverage.out ./... || result=1
   if [ -f coverage.out ] && [ $result -eq 0 ]; then
@@ -36,31 +36,21 @@ else
 fi
 
 # No need to run other checks on OSs other than linux.
-# We default TRAVIS_OS_NAME to "linux" so that we don't abort here when run locally.
-if [[ "${TRAVIS_OS_NAME:-linux}" != "linux" ]]; then
+# We default RUNNER_OS to "Linux" so that we don't abort here when run locally.
+if [[ "${RUNNER_OS:-Linux}" != "Linux" ]]; then
   exit $result
 fi
 
-# Update the regexp below when upgrading to a
-# new Go version. Some checks below we only run
-# for the latest Go version.
-latest_go_version=0
-if [[ $(go version) == *go1\.16* ]]; then
-  latest_go_version=1
-fi
-
-if [[ ${latest_go_version} -eq 1 ]]; then
-  echo
-  echo "Ensuring .go files are formatted with gofmt -s..."
-  mapfile -t go_files < <(find . -name '*.go' -type f | grep -v testdata)
-  DIFF="$(gofmt -s -d "${go_files[@]}")"
-  if [ -n "$DIFF" ]; then
-    echo "FAIL: please run gofmt -s and commit the result"
-    echo "$DIFF";
-    result=1;
-  else
-    echo "OK"
-  fi;
+echo
+echo "Ensuring .go files are formatted with gofmt -s..."
+mapfile -t go_files < <(find . -name '*.go' -type f | grep -v testdata)
+DIFF="$(gofmt -s -d "${go_files[@]}")"
+if [ -n "$DIFF" ]; then
+  echo "FAIL: please run gofmt -s and commit the result"
+  echo "$DIFF";
+  result=1;
+else
+  echo "OK"
 fi;
 
 
@@ -69,21 +59,19 @@ fi;
 # ./internal/alldeps
 #
 # Whenever project dependencies change, rerun ./internal/listdeps.sh
-if [[ ${latest_go_version} -eq 1 ]]; then
-  echo
-  echo "Ensuring that there are no dependencies not listed in ./internal/alldeps..."
-  (./internal/listdeps.sh | diff ./internal/alldeps - && echo "OK") || {
-    echo "FAIL: dependencies changed; run: internal/listdeps.sh > internal/alldeps"
-    # Module behavior may differ across versions.
-    echo "using the latest go version."
-    result=1
-  }
-fi
+echo
+echo "Ensuring that there are no dependencies not listed in ./internal/alldeps..."
+(./internal/listdeps.sh | diff ./internal/alldeps - && echo "OK") || {
+  echo "FAIL: dependencies changed; run: internal/listdeps.sh > internal/alldeps"
+  # Module behavior may differ across versions.
+  echo "using the latest go version."
+  result=1
+}
 
 
 # For pull requests, check if there are undeclared incompatible API changes.
 # Skip this if we're already going to fail since it is expensive.
-if [[ ${latest_go_version} -eq 1 ]] && [[ ${result} -eq 0 ]] && [[ ! -z "${TRAVIS_BRANCH:-x}" ]] && [[ ! -z "${TRAVIS_PULL_REQUEST_SHA:-x}" ]]; then
+if ${result} -eq 0 ]] && [[ ! -z "${GITHUB_HEAD_REF:-x}" ]]; then
   echo
   ./internal/check_api_change.sh || result=1;
 fi

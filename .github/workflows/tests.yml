@@ -18,15 +18,8 @@ jobs:
   build:
     strategy:
       matrix:
-        # Run most recent version of Go on all supported OSs.
-        # When updating Go versions, also edit the version test in
-        # internal/runtests.sh.
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: 1.17.x
-        # Also run previous version of Go, but only on Ubuntu.
-        include:
-          - os: ubuntu-latest
-            go-version: 1.16.x
+        go-version: [1.17.x]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install Go
@@ -35,5 +28,8 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: Checkout code
         uses: actions/checkout@v2
-      - name: Test
-        run: './internal/runtests.sh'
+        with:
+          fetch-depth: 2  # required for codecov
+      - name: Run Tests
+        shell: bash
+        run: 'internal/runtests.sh'
