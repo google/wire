@@ -78,11 +78,11 @@ again. If you are submitting code on behalf of your employer, there's
     a single commit before merging your change.
 *   Check the diffs, write a useful description (including something like
     `Fixes #123` if it's fixing a bug) and send the PR out.
-*   [Travis CI](http://travis-ci.com) will run tests against the PR. This should
+*   Github will run tests against the PR. This should
     happen within 10 minutes or so. If a test fails, go back to the coding stage
     and try to fix the test and push the same branch again. You won't need to
     make a new pull request, the changes will be rolled directly into the PR you
-    already opened. Wait for Travis again. There is no need to assign a reviewer
+    already opened. Wait for the tests again. There is no need to assign a reviewer
     to the PR, the project team will assign someone for review during the
     standard [triage](#triaging) process.
 
