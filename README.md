@@ -1,6 +1,6 @@
 # Wire: Automated Initialization in Go
 
-[![Build Status](https://travis-ci.com/google/wire.svg?branch=master)][travis]
+[![Build Status](https://github.com/github/google/wire/workflows/tests.yml/badge.svg?branch=main)
 [![godoc](https://godoc.org/github.com/google/wire?status.svg)][godoc]
 [![Coverage](https://codecov.io/gh/google/wire/branch/master/graph/badge.svg)](https://codecov.io/gh/google/wire)
 
@@ -17,7 +17,6 @@ For an overview, see the [introductory blog post][].
 [dependency injection]: https://en.wikipedia.org/wiki/Dependency_injection
 [introductory blog post]: https://blog.golang.org/wire
 [godoc]: https://godoc.org/github.com/google/wire
-[travis]: https://travis-ci.com/google/wire
 
 ## Installing
 
