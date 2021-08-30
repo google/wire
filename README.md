@@ -1,6 +1,6 @@
 # Wire: Automated Initialization in Go
 
-[![Build Status](https://travis-ci.com/google/wire.svg?branch=master)][travis]
+[![Build Status](https://github.com/github/google/wire/workflows/tests.yml/badge.svg?branch=main)
 [![godoc](https://godoc.org/github.com/google/wire?status.svg)][godoc]
 [![Coverage](https://codecov.io/gh/google/wire/branch/master/graph/badge.svg)](https://codecov.io/gh/google/wire)
 

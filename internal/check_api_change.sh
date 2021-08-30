@@ -21,14 +21,11 @@
 # This script expects:
 # a) to be run at the root of the repository
 # b) HEAD is pointing to a commit that merges between the pull request and the
-#    upstream branch (TRAVIS_BRANCH). This is what Travis does (see
-#    https://docs.travis-ci.com/user/pull-requests/ for details), but if you
-#    are testing this script manually, you may need to manually create a merge
-#    commit.
+#    upstream branch (GITHUB_HEAD_REF).
 
 set -euo pipefail
 
-UPSTREAM_BRANCH="${TRAVIS_BRANCH:-master}"
+UPSTREAM_BRANCH="${GITHUB_HEAD_REF:-master}"
 echo "Checking for incompatible API changes relative to ${UPSTREAM_BRANCH}..."
 
 MASTER_CLONE_DIR="$(mktemp -d)"

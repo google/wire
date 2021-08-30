@@ -20,6 +20,6 @@ set -euo pipefail
 # $ internal/listdeps.sh > internal/alldeps
 #
 # Important note: there are changes in module tooling behavior between go 1.11
-# and go 1.12; please make sure to use the same version of Go as used by Travis
-# (see .travis.yml) when updating the alldeps file.
+# and go 1.12; please make sure to use the same version of Go as used by Github
+# Actions (see .github/workflows/tests.yml) when updating the alldeps file.
 go list -deps -f '{{with .Module}}{{.Path}}{{end}}' ./... | sort | uniq
