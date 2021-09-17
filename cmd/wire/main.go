@@ -124,8 +124,9 @@ func (cmd *genCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (cmd *genCmd) findAllSubDir(dirs []string) ([]string, error) {
-	retDirs := make([]string, len(dirs), len(dirs)*5)
+	retDirs := make([]string, len(dirs), len(dirs)*1024)
 	copy(retDirs, dirs)
+	realDirs := make([]string, 0, len(dirs)*1024)
 	for index := 0; index < len(retDirs); index++ {
 		dir, err := os.Open(retDirs[index])
 		if err != nil {
@@ -136,22 +137,30 @@ func (cmd *genCmd) findAllSubDir(dirs []string) ([]string, error) {
 			return nil, err
 		}
 		if !stat.IsDir() {
+			realDirs = append(realDirs, retDirs[index])
 			continue
 		}
+
 		subdirs, err := dir.ReadDir(0)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 
 		dirName := strings.TrimSuffix(retDirs[index], "/") + "/"
+		hasFile := false
 		for _, v := range subdirs {
 			if !v.IsDir() {
+				hasFile = true
 				continue
 			}
 			retDirs = append(retDirs, dirName+v.Name())
 		}
+
+		if hasFile {
+			realDirs = append(realDirs, retDirs[index])
+		}
 	}
-	return retDirs, nil
+	return realDirs, nil
 }
 
 func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
