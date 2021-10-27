@@ -24,7 +24,7 @@ For an overview, see the [introductory blog post][].
 Install Wire by running:
 
 ```shell
-go get github.com/google/wire/cmd/wire
+go install github.com/google/wire/cmd/wire
 ```
 
 and ensuring that `$GOPATH/bin` is added to your `$PATH`.
