@@ -29,6 +29,12 @@ go get github.com/google/wire/cmd/wire
 
 and ensuring that `$GOPATH/bin` is added to your `$PATH`.
 
+In module mode:
+
+```shell
+go install github.com/google/wire/cmd/wire@v0.5.0
+```
+
 ## Documentation
 
 - [Tutorial][]
