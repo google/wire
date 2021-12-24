@@ -15,9 +15,13 @@ directory as this README.
 Let's create a small program that simulates an event with a greeter greeting
 guests with a particular message.
 
-To start, we will create three types: 1) a message for a greeter, 2) a greeter
-who conveys that message, and 3) an event that starts with the greeter greeting
-guests. In this design, we have three `struct` types:
+To start, we will create three types: 
+
+1. A message for a greeter 
+2. A greeter who conveys that message 
+3. An event that starts with the greeter greeting guests. 
+    
+In this design, we have three `struct` types:
 
 ``` go
 type Message string
