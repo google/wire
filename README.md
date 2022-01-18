@@ -1,9 +1,11 @@
 # Wire: Automated Initialization in Go
 
 [![Build Status](https://github.com/google/wire/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/google/wire/actions)
-[![godoc](https://godoc.org/github.com/google/wire?status.svg)][godoc]
 [![Coverage](https://codecov.io/gh/google/wire/branch/master/graph/badge.svg)](https://codecov.io/gh/google/wire)
-
+[![Go Report Card](https://goreportcard.com/badge/github.com/google/wire)](https://goreportcard.com/report/github.com/google/wire)
+[![godoc](https://godoc.org/github.com/google/wire?status.svg)][godoc]
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/google/wire)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 Wire is a code generation tool that automates connecting components using
 [dependency injection][]. Dependencies between components are represented in
