@@ -25,7 +25,7 @@
 
 set -euo pipefail
 
-UPSTREAM_BRANCH="${GITHUB_BASE_REF:-master}"
+UPSTREAM_BRANCH="${GITHUB_BASE_REF:-main}"
 echo "Checking for incompatible API changes relative to ${UPSTREAM_BRANCH}..."
 
 MASTER_CLONE_DIR="$(mktemp -d)"
@@ -58,7 +58,7 @@ for pkg in $PKGS; do
     continue;
   fi
 
-  # Compute export data for master@HEAD.
+  # Compute export data for main@HEAD.
   (cd "$MASTER_CLONE_DIR"; apidiff -w "$PKGINFO_MASTER" "$pkg")
 
   # Print all changes for posterity.
@@ -79,7 +79,7 @@ fi
 echo "Found breaking API change(s) in: ${incompatible_change_pkgs[*]}."
 
 # Found incompatible changes; see if they were declared as OK via a commit.
-if git cherry -v master | grep -q "BREAKING_CHANGE_OK"; then
+if git cherry -v main | grep -q "BREAKING_CHANGE_OK"; then
   echo "Allowing them due to a commit message with BREAKING_CHANGE_OK.";
   exit 0;
 fi

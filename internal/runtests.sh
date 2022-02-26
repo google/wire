@@ -71,10 +71,9 @@ echo "Ensuring that there are no dependencies not listed in ./internal/alldeps..
 
 # For pull requests, check if there are undeclared incompatible API changes.
 # Skip this if we're already going to fail since it is expensive.
-# CURRENTLY BROKEN
-# if [[ ${result} -eq 0 ]] && [[ ! -z "${GITHUB_HEAD_REF:-x}" ]]; then
-  # echo
-  # ./internal/check_api_change.sh || result=1;
-# fi
+if [[ ${result} -eq 0 ]] && [[ ! -z "${GITHUB_HEAD_REF:-x}" ]]; then
+  echo
+  ./internal/check_api_change.sh || result=1;
+fi
 
 exit $result
