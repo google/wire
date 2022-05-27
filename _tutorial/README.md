@@ -163,7 +163,7 @@ injector complete, we are ready to use the `wire` command line tool.
 Install the tool with:
 
 ``` shell
-go get github.com/google/wire/cmd/wire
+go install github.com/google/wire/cmd/wire@latest
 ```
 
 Then in the same directory with the above code, simply run `wire`. Wire will
