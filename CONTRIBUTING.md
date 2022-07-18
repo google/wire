@@ -12,7 +12,7 @@ that isn't working for you.
 ### Bugs
 
 If your issue is a bug, open one
-[here](https://github.com/google/wire/issues/new). The easiest way to file an
+[here](https://github.com/zeriontech/google-wire/issues/new). The easiest way to file an
 issue with all the right information is to run `go bug`. `go bug` will print out
 a handy template of questions and system information that will help us get to
 the root of the issue quicker.
@@ -31,7 +31,7 @@ milestone which means the issue is intended to be worked on. Issues that we
 would like to address but do not have time for are placed into the [Unplanned][]
 milestone.
 
-[Unplanned]: https://github.com/google/wire/milestone/1
+[Unplanned]: https://github.com/zeriontech/google-wire/milestone/1
 
 ## Contributing Code
 

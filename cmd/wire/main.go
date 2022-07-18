@@ -14,7 +14,7 @@
 
 // Wire is a compile-time dependency injection tool.
 //
-// For an overview, see https://github.com/google/wire/blob/master/README.md
+// For an overview, see https://github.com/zeriontech/google-wire/blob/master/README.md
 package main
 
 import (
@@ -32,8 +32,8 @@ import (
 	"strings"
 
 	"github.com/google/subcommands"
-	"github.com/google/wire/internal/wire"
 	"github.com/pmezard/go-difflib/difflib"
+	"github.com/zeriontech/google-wire/internal/wire"
 	"golang.org/x/tools/go/types/typeutil"
 )
 

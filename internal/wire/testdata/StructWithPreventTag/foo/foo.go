@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/google/wire"
+	wire "github.com/zeriontech/google-wire"
 )
 
 func main() {

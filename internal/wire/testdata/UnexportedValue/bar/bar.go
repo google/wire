@@ -14,7 +14,7 @@
 
 package bar
 
-import "github.com/google/wire"
+import wire "github.com/zeriontech/google-wire"
 
 var Value = wire.Value(privateMsg)
 

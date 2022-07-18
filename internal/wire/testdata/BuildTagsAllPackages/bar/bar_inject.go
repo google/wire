@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build wireinject
+//go:build wireinject
+// +build wireinject
 
 package bar
 
-import "github.com/google/wire"
+import "github.com/zeriontech/google-wire"
 
 // Set provides a friendly user greeting.
 var Set = wire.NewSet(wire.Value("Hello, World!"))
