@@ -602,7 +602,16 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 			ig.p("%s\n", c.Text)
 		}
 	}
-	ig.p("func %s(", name)
+	var recv string
+	if v := sig.Recv(); v != nil {
+		switch t := v.Type().(type) {
+		case *types.Pointer:
+			recv = " (*" + t.Elem().(*types.Named).Obj().Name() + ")"
+		case *types.Named:
+			recv = " (" + t.Obj().Name() + ")"
+		}
+	}
+	ig.p("func%s %s(", recv, name)
 	for i := 0; i < params.Len(); i++ {
 		if i > 0 {
 			ig.p(", ")
