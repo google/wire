@@ -59,6 +59,10 @@ func NewSet(...interface{}) ProviderSet {
 	return ProviderSet{}
 }
 
+func Subtract(...interface{}) ProviderSet {
+	return ProviderSet{}
+}
+
 // Build is placed in the body of an injector function template to declare the
 // providers to use. The Wire code generation tool will fill in an
 // implementation of the function. The arguments to Build are interpreted the
@@ -156,12 +160,12 @@ type StructProvider struct{}
 //
 // For example:
 //
-//  type S struct {
-//    MyFoo *Foo
-//    MyBar *Bar
-//  }
-//  var Set = wire.NewSet(wire.Struct(new(S), "MyFoo")) -> inject only S.MyFoo
-//  var Set = wire.NewSet(wire.Struct(new(S), "*")) -> inject all fields
+//	type S struct {
+//	  MyFoo *Foo
+//	  MyBar *Bar
+//	}
+//	var Set = wire.NewSet(wire.Struct(new(S), "MyFoo")) -> inject only S.MyFoo
+//	var Set = wire.NewSet(wire.Struct(new(S), "*")) -> inject all fields
 func Struct(structType interface{}, fieldNames ...string) StructProvider {
 	return StructProvider{}
 }
@@ -175,22 +179,22 @@ type StructFields struct{}
 //
 // The following example would provide Foo and Bar using S.MyFoo and S.MyBar respectively:
 //
-//  type S struct {
-//  	MyFoo Foo
-//  	MyBar Bar
-//  }
+//	type S struct {
+//		MyFoo Foo
+//		MyBar Bar
+//	}
 //
-//  func NewStruct() S { /* ... */ }
-//  var Set = wire.NewSet(wire.FieldsOf(new(S), "MyFoo", "MyBar"))
+//	func NewStruct() S { /* ... */ }
+//	var Set = wire.NewSet(wire.FieldsOf(new(S), "MyFoo", "MyBar"))
 //
-//  or
+//	or
 //
-//  func NewStruct() *S { /* ... */ }
-//  var Set = wire.NewSet(wire.FieldsOf(new(*S), "MyFoo", "MyBar"))
+//	func NewStruct() *S { /* ... */ }
+//	var Set = wire.NewSet(wire.FieldsOf(new(*S), "MyFoo", "MyBar"))
 //
-//  If the structType argument is a pointer to a pointer to a struct, then FieldsOf
-//  additionally provides a pointer to each field type (e.g., *Foo and *Bar in the
-//  example above).
+//	If the structType argument is a pointer to a pointer to a struct, then FieldsOf
+//	additionally provides a pointer to each field type (e.g., *Foo and *Bar in the
+//	example above).
 func FieldsOf(structType interface{}, fieldNames ...string) StructFields {
 	return StructFields{}
 }

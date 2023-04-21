@@ -546,6 +546,9 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 		case "NewSet":
 			pset, errs := oc.processNewSet(info, pkgPath, call, nil, varName)
 			return pset, notePositionAll(exprPos, errs)
+		case "Subtract":
+			pset, errs := oc.processSubtract(info, pkgPath, call, nil, varName)
+			return pset, notePositionAll(exprPos, errs)
 		case "Bind":
 			b, err := processBind(oc.fset, info, call)
 			if err != nil {
@@ -588,6 +591,115 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 		return p, nil
 	}
 	return nil, []error{notePosition(exprPos, errors.New("unknown pattern"))}
+}
+
+func (oc *objectCache) filterType(set *ProviderSet, t types.Type) []error {
+	hasType := func(outs []types.Type) bool {
+		for _, o := range outs {
+			if types.Identical(o, t) {
+				return true
+			}
+			pt, ok := o.(*types.Pointer)
+			if ok && types.Identical(pt.Elem(), t) {
+				return true
+			}
+		}
+		return false
+	}
+
+	providers := make([]*Provider, 0, len(set.Providers))
+	for _, p := range set.Providers {
+		if !hasType(p.Out) {
+			providers = append(providers, p)
+		}
+	}
+	set.Providers = providers
+
+	bindings := make([]*IfaceBinding, 0, len(set.Bindings))
+	for _, i := range set.Bindings {
+		if !types.Identical(i.Iface, t) {
+			bindings = append(bindings, i)
+		}
+	}
+	set.Bindings = bindings
+
+	values := make([]*Value, 0, len(set.Values))
+	for _, v := range set.Values {
+		if !types.Identical(v.Out, t) {
+			values = append(values, v)
+		}
+	}
+	set.Values = values
+
+	fields := make([]*Field, 0, len(set.Fields))
+	for _, f := range set.Fields {
+		if !hasType(f.Out) {
+			fields = append(fields, f)
+		}
+	}
+	set.Fields = fields
+
+	imports := make([]*ProviderSet, 0, len(set.Imports))
+	for _, p := range set.Imports {
+		clone := *p
+		if errs := oc.filterType(&clone, t); len(errs) > 0 {
+			return errs
+		}
+		imports = append(imports, &clone)
+	}
+	set.Imports = imports
+
+	var errs []error
+	set.providerMap, set.srcMap, errs = buildProviderMap(oc.fset, oc.hasher, set)
+	if len(errs) > 0 {
+		return errs
+	}
+	return nil
+}
+
+func (oc *objectCache) processSubtract(info *types.Info, pkgPath string, call *ast.CallExpr, args *InjectorArgs, varName string) (interface{}, []error) {
+	// Assumes that call.Fun is wire.Subtract.
+	if len(call.Args) < 2 {
+		return nil, []error{notePosition(oc.fset.Position(call.Pos()),
+			errors.New("call to Subtract must specify types to be subtracted"))}
+	}
+	firstArg, errs := oc.processExpr(info, pkgPath, call.Args[0], "")
+	if len(errs) > 0 {
+		return nil, errs
+	}
+	set, ok := firstArg.(*ProviderSet)
+	if !ok {
+		return nil, []error{notePosition(oc.fset.Position(call.Pos()),
+			fmt.Errorf("first argument to Subtract must be a Set")),
+		}
+	}
+	pset := &ProviderSet{
+		Pos:          call.Pos(),
+		InjectorArgs: args,
+		PkgPath:      pkgPath,
+		VarName:      varName,
+		// Copy the other fields.
+		Providers: set.Providers,
+		Bindings:  set.Bindings,
+		Values:    set.Values,
+		Fields:    set.Fields,
+		Imports:   set.Imports,
+	}
+	ec := new(errorCollector)
+	for _, arg := range call.Args[1:] {
+		ptr, ok := info.TypeOf(arg).(*types.Pointer)
+		if !ok {
+			ec.add(notePosition(oc.fset.Position(arg.Pos()),
+				errors.New("argument to Subtract must be a pointer"),
+			))
+			continue
+		}
+		ec.add(oc.filterType(pset, ptr.Elem())...)
+	}
+	if len(ec.errors) > 0 {
+		return nil, ec.errors
+	}
+	return pset, nil
 }
 
 func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast.CallExpr, args *InjectorArgs, varName string) (*ProviderSet, []error) {
@@ -1173,9 +1285,9 @@ func (pt ProvidedType) IsNil() bool {
 //
 //   - For a function provider, this is the first return value type.
 //   - For a struct provider, this is either the struct type or the pointer type
-// 	   whose element type is the struct type.
-// 	 - For a value, this is the type of the expression.
-// 	 - For an argument, this is the type of the argument.
+//     whose element type is the struct type.
+//   - For a value, this is the type of the expression.
+//   - For an argument, this is the type of the argument.
 func (pt ProvidedType) Type() types.Type {
 	return pt.t
 }
