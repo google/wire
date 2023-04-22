@@ -1,0 +1,5 @@
+example.com/foo/wire.go:x:y: call to Subtract must specify types to be subtracted
+
+example.com/foo/wire.go:x:y: first argument to Subtract must be a Set
+
+example.com/foo/wire.go:x:y: argument to Subtract must be a pointer
