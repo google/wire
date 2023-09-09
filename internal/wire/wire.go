@@ -642,7 +642,11 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 		case structProvider:
 			ig.structProviderCall(lname, c)
 		case funcProviderCall:
-			ig.funcProviderCall(lname, c, injectSig)
+			if c.async {
+				ig.asyncFuncProviderCall(lname, c, injectSig)
+			} else {
+				ig.funcProviderCall(lname, c, injectSig)
+			}
 		case valueExpr:
 			ig.valueExpr(lname, c)
 		case selectorExpr:
@@ -709,6 +713,61 @@ func (ig *injectorGen) funcProviderCall(lname string, c *call, injectSig outputS
 		ig.p(", err\n")
 		ig.p("\t}\n")
 	}
+}
+
+func (ig *injectorGen) asyncFuncProviderCall(lname string, c *call, injectSig outputSignature) {
+	// add dependant count
+	ig.p("\t%sChan := make(chan %s, 1)\n", lname, c.out.String())
+
+	ig.p("\tgo func(){\n")
+
+	ig.p("\t%s", lname)
+
+	prevCleanup := len(ig.cleanupNames)
+	if c.hasCleanup {
+		cname := disambiguate("cleanup", ig.nameInInjector)
+		ig.cleanupNames = append(ig.cleanupNames, cname)
+		ig.p(", %s", cname)
+	}
+
+	if c.hasErr {
+		ig.p(", %s", ig.errVar)
+	}
+
+	ig.p(" := ")
+
+	ig.p("%s(", ig.g.qualifiedID(c.pkg.Name(), c.pkg.Path(), c.name))
+	for i, a := range c.args {
+		if i > 0 {
+			ig.p(", ")
+		}
+		if a < len(ig.paramNames) {
+			ig.p("%s", ig.paramNames[a])
+		} else {
+			ig.p("%s", ig.localNames[a-len(ig.paramNames)])
+		}
+	}
+	if c.varargs {
+		ig.p("...")
+	}
+	ig.p(")\n")
+	if c.hasErr {
+		ig.p("\tif %s != nil {\n", ig.errVar)
+		for i := prevCleanup - 1; i >= 0; i-- {
+			ig.p("\t\t%s()\n", ig.cleanupNames[i])
+		}
+		ig.p("%sChan <- %s", lname, zeroValue(injectSig.out, ig.g.qualifyPkg))
+
+		if injectSig.cleanup {
+			ig.p(", nil")
+		}
+		ig.p(", err\n")
+		ig.p("\t}\n")
+	} else {
+		ig.p("%sChan <- %s", lname, lname)
+	}
+
+	ig.p("\t}()\n")
 }
 
 func (ig *injectorGen) structProviderCall(lname string, c *call) {

@@ -79,6 +79,8 @@ type call struct {
 	hasCleanup bool
 	// hasErr is true if the provider call returns an error.
 	hasErr bool
+	// async is true if the provider should be called in a goroutine
+	async bool
 
 	// The following are only set for kind == valueExpr:
 
@@ -206,6 +208,7 @@ dfs:
 				out:        curr.t,
 				hasCleanup: p.HasCleanup,
 				hasErr:     p.HasErr,
+				async:      p.Async,
 			})
 		case pv.IsValue():
 			v := pv.Value()
