@@ -25,15 +25,19 @@ import (
 	"go/types"
 	"io/ioutil"
 	"log"
+	"net/url"
 	"os"
+	"os/exec"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/awalterschulze/gographviz"
 	"github.com/google/subcommands"
-	"github.com/google/wire/internal/wire"
 	"github.com/pmezard/go-difflib/difflib"
+	"github.com/taichimaeda/wireviz/internal/wire"
 	"golang.org/x/tools/go/types/typeutil"
 )
 
@@ -45,6 +49,7 @@ func main() {
 	subcommands.Register(&diffCmd{}, "")
 	subcommands.Register(&genCmd{}, "")
 	subcommands.Register(&showCmd{}, "")
+	subcommands.Register(&graphCmd{}, "")
 	flag.Parse()
 
 	// Initialize the default logger to log to stderr.
@@ -64,6 +69,7 @@ func main() {
 		"diff":     true,
 		"gen":      true,
 		"show":     true,
+		"graph":    true,
 	}
 	// Default to running the "gen" command.
 	if args := flag.Args(); len(args) == 0 || !allCmds[args[0]] {
@@ -606,4 +612,72 @@ func logErrors(errs []error) {
 	for _, err := range errs {
 		log.Println(strings.Replace(err.Error(), "\n", "\n\t", -1))
 	}
+}
+
+type graphCmd struct {
+	tags string
+}
+
+func (*graphCmd) Name() string { return "graph" }
+func (*graphCmd) Synopsis() string {
+	return "visualize providers as graph using grpahviz"
+}
+func (*graphCmd) Usage() string {
+	return `graph [package] [injector]
+
+  Given an injector function in the specified package, graph visualizes the dependency grah of the providers
+  by generating a graphviz dot file and displaying it in a browser.
+`
+}
+func (cmd *graphCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&cmd.tags, "tags", "", "append build tags to the default wirebuild")
+}
+func (cmd *graphCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Println("failed to get working directory: ", err)
+		return subcommands.ExitFailure
+	}
+	if len(f.Args()) != 2 {
+		log.Println("graph requires two arguments: package and injector")
+		return subcommands.ExitFailure
+	}
+	pattern := f.Args()[0]
+	name := f.Args()[1]
+	graph, errs := wire.Visualize(ctx, wd, os.Environ(), pattern, name, cmd.tags)
+	if len(errs) > 0 {
+		logErrors(errs)
+		log.Println("graph failed")
+		return subcommands.ExitFailure
+	}
+	if err := showGraphInBrowser(graph); err != nil {
+		log.Println("failed to show graph in browser: ", err)
+		return subcommands.ExitFailure
+	}
+	return subcommands.ExitSuccess
+}
+
+func showGraphInBrowser(graph *gographviz.Graph) error {
+	dot := strings.Replace(url.QueryEscape(graph.String()), "+", "%20", -1)
+	url := "https://edotor.net/#" + dot
+	if err := openUrlInBrowser(url); err != nil {
+		return err
+	}
+	return nil
+}
+
+func openUrlInBrowser(url string) error {
+	log.Print(url)
+	var err error
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", url).Start()
+	case "windows":
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case "darwin":
+		err = exec.Command("open", url).Start()
+	default:
+		err = fmt.Errorf("unsupported platform")
+	}
+	return err
 }

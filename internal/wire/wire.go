@@ -17,6 +17,7 @@
 package wire
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -34,6 +35,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/awalterschulze/gographviz"
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 )
@@ -958,3 +960,201 @@ var (
 	errorType   = types.Universe.Lookup("error").Type()
 	cleanupType = types.NewSignature(nil, nil, nil, false)
 )
+
+// TODO: Move this function to the bottom of this file.
+func Visualize(ctx context.Context, wd string, env []string, pattern string, name string, tags string) (*gographviz.Graph, []error) {
+	pkgs, errs := load(ctx, wd, env, tags, []string{pattern})
+	if len(errs) > 0 {
+		return nil, errs
+	}
+	if len(pkgs) != 1 {
+		return nil, []error{fmt.Errorf("expected exactly one package")}
+	}
+	graph := gographviz.NewGraph()
+	graph.SetName("G")
+	graph.SetDir(true)
+
+	pkg := pkgs[0]
+	v := newViz(pkg)
+	if errs := v.generateInjector(name); errs != nil {
+		return nil, errs
+	}
+	// Add given arguments as nodes
+	for _, in := range v.ins {
+		key := escapeString(v.givenKey(in))
+		label := escapeString(v.givenLabel(in))
+		graph.AddNode("G", key, map[string]string{
+			"label": label,
+			"shape": "octagon",
+		})
+	}
+	// Add providers in the injection calls as nodes
+	for i, call := range v.calls {
+		// Sort out the subgraph relationships
+		sets := v.collectSetLabels(v.set.srcMap.At(call.out).(*providerSetSrc), &call.out)
+		for j, set := range sets {
+			sets[j] = escapeString("cluster" + set)
+		}
+		sets = append([]string{"G"}, sets...)
+		for j, set := range sets {
+			if set != "G" && !graph.IsSubGraph(set) {
+				graph.AddSubGraph(sets[j-1], set, map[string]string{
+					"label": set,
+					"color": "red",
+				})
+			}
+		}
+		// Find the current provider
+		parent := sets[len(sets)-1]
+		from := escapeString(v.callKey(&call))
+		label := escapeString(v.callLabel(&call))
+		graph.AddNode(parent, from, map[string]string{
+			"label": label,
+			"shape": map[bool]string{true: "box", false: "doubleoctagon"}[i < len(v.calls)-1],
+		})
+		// Add dependencies as edges
+		for _, arg := range call.args {
+			if arg < len(v.ins) {
+				to := escapeString(v.givenKey(v.ins[arg]))
+				graph.AddEdge(from, to, true, nil)
+			} else {
+				to := escapeString(v.callKey(&v.calls[arg-len(v.ins)]))
+				graph.AddEdge(from, to, true, nil)
+			}
+		}
+	}
+	return graph, nil
+}
+
+func findFuncDecl(pkg *packages.Package, name string) (*ast.FuncDecl, error) {
+	for _, f := range pkg.Syntax {
+		for _, decl := range f.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok {
+				if fn.Name.Name == name {
+					return fn, nil
+				}
+			}
+		}
+	}
+	return nil, fmt.Errorf("function %s not found", name)
+}
+
+type viz struct {
+	pkg   *packages.Package
+	calls []call
+	ins   []*types.Var
+	set   *ProviderSet
+}
+
+func newViz(pkg *packages.Package) *viz {
+	return &viz{
+		pkg: pkg,
+	}
+}
+
+func escapeString(s string) string {
+	return `"` + s + `"`
+}
+
+func (v *viz) callKey(call *call) string {
+	switch call.kind {
+	case valueExpr:
+		return v.formatExpr(&call.valueExpr)
+	case funcProviderCall, structProvider, selectorExpr:
+		return call.name
+	}
+	panic("unknown kind")
+}
+
+func (v *viz) callLabel(call *call) string {
+	switch call.kind {
+	case valueExpr:
+		return v.formatExpr(&call.valueExpr) + `\n` + call.valueTypeInfo.TypeOf(call.valueExpr).String()
+	case funcProviderCall, structProvider, selectorExpr:
+		return call.name + `\n` + call.pkg.Path()
+	}
+	panic("unknown kind")
+}
+
+func (v *viz) givenKey(given *types.Var) string {
+	return given.Name()
+}
+
+func (v *viz) givenLabel(given *types.Var) string {
+	return given.Name() + `\n` + given.Type().String()
+}
+
+func (v *viz) formatExpr(expr *ast.Expr) string {
+	var buf bytes.Buffer
+	writer := bufio.NewWriter(&buf)
+	if err := format.Node(writer, v.pkg.Fset, *expr); err != nil {
+		panic(err)
+	}
+	writer.Flush()
+	return buf.String()
+}
+
+func (v *viz) generateInjector(name string) []error {
+	fn, err := findFuncDecl(v.pkg, name)
+	if err != nil {
+		return []error{err}
+	}
+	buildCall, err := findInjectorBuild(v.pkg.TypesInfo, fn)
+	if err != nil {
+		return []error{err}
+	}
+	if buildCall == nil {
+		return []error{fmt.Errorf("no injector build call found")}
+	}
+	sig := v.pkg.TypesInfo.ObjectOf(fn.Name).Type().(*types.Signature)
+	ins, out, err := injectorFuncSignature(sig)
+	if err != nil {
+		if w, ok := err.(*wireErr); ok {
+			return []error{notePosition(w.position, fmt.Errorf("inject %s: %v", fn.Name.Name, w.error))}
+		} else {
+			return []error{notePosition(v.pkg.Fset.Position(fn.Pos()), fmt.Errorf("inject %s: %v", fn.Name.Name, err))}
+		}
+	}
+	injectorArgs := &InjectorArgs{
+		Name:  fn.Name.Name,
+		Tuple: ins,
+		Pos:   fn.Pos(),
+	}
+	oc := newObjectCache([]*packages.Package{v.pkg})
+	set, errs := oc.processNewSet(v.pkg.TypesInfo, v.pkg.PkgPath, buildCall, injectorArgs, "")
+	if len(errs) > 0 {
+		return notePositionAll(v.pkg.Fset.Position(fn.Pos()), errs)
+	}
+	params := sig.Params()
+	calls, errs := solve(v.pkg.Fset, out.out, params, set)
+	if len(errs) > 0 {
+		return mapErrors(errs, func(e error) error {
+			if w, ok := e.(*wireErr); ok {
+				return notePosition(w.position, fmt.Errorf("inject %s: %v", name, w.error))
+			}
+			return notePosition(v.pkg.Fset.Position(fn.Pos()), fmt.Errorf("inject %s: %v", name, e))
+		})
+	}
+	v.calls = calls
+	for i := 0; i < ins.Len(); i++ {
+		v.ins = append(v.ins, ins.At(i))
+	}
+	v.set = set
+	return nil
+}
+
+func (v *viz) collectSetLabels(p *providerSetSrc, t *types.Type) []string {
+	if p.Import != nil {
+		if parent := p.Import.srcMap.At(*t); parent != nil {
+			sets := v.collectSetLabels(parent.(*providerSetSrc), t)
+			label := p.Import.PkgPath
+			if p.Import.VarName != "" {
+				label += "#" + p.Import.VarName
+			}
+			return append([]string{label}, sets...)
+		} else {
+			return []string{p.Import.PkgPath}
+		}
+	}
+	return []string{}
+}
