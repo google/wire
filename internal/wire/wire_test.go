@@ -166,11 +166,24 @@ func TestWire(t *testing.T) {
 }
 
 func goBuildCheck(goToolPath, gopath string, test *testCase) error {
-	// Run `go build`.
+	// Run `go get golang.org/x/sync/errgroup`.
 	testExePath := filepath.Join(gopath, "bin", "testprog")
+	goGetCmd := []string{"get", "golang.org/x/sync/errgroup"}
+	goGetCmd = append(goGetCmd, test.pkg)
+	cmd := exec.Command(goToolPath, goGetCmd...)
+	cmd.Dir = filepath.Join(gopath, "src", "example.com")
+	cmd.Env = append(os.Environ(), "GOPATH="+gopath)
+	if buildOut, err := cmd.CombinedOutput(); err != nil {
+		if len(buildOut) > 0 {
+			return fmt.Errorf("build: %v; output:\n%s", err, buildOut)
+		}
+		return fmt.Errorf("build: %v", err)
+	}
+
+	// Run `go build`.
 	buildCmd := []string{"build", "-o", testExePath}
 	buildCmd = append(buildCmd, test.pkg)
-	cmd := exec.Command(goToolPath, buildCmd...)
+	cmd = exec.Command(goToolPath, buildCmd...)
 	cmd.Dir = filepath.Join(gopath, "src", "example.com")
 	cmd.Env = append(os.Environ(), "GOPATH="+gopath)
 	if buildOut, err := cmd.CombinedOutput(); err != nil {
@@ -463,7 +476,6 @@ type testCase struct {
 //			program_out.txt
 //					expected output from the final compiled program,
 //					missing if wire_errs.txt is present
-//
 func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 	name := filepath.Base(root)
 	pkg, err := ioutil.ReadFile(filepath.Join(root, "pkg"))

@@ -12,21 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package bar
 
-import (
-	"context"
-	"fmt"
+import "context"
 
-	"example.com/bar"
-	"example.com/baz"
-)
+type Bar int
 
-func main() {
-	f, _ := injectFoo(context.Background())
-	fmt.Println(f)
-}
-
-func provideFoo(b1 bar.Bar, b2 baz.Baz) (int, error) {
-	return int(b1) + int(b2), nil
+func ProvideBar(ctx context.Context) (Bar, error) {
+	return 1, nil
 }

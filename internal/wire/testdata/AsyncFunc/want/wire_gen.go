@@ -6,13 +6,73 @@
 
 package main
 
+import (
+	"context"
+	"example.com/bar"
+	"example.com/baz"
+	"golang.org/x/sync/errgroup"
+)
+
 // Injectors from wire.go:
 
-func injectFoo() int {
+func injectFoo(ctx context.Context) (int, error) {
+	g, ctx := errgroup.WithContext(ctx)
+	barBarChan := make(chan bar.Bar, 1)
+	g.Go(func() error {
+		barBar, err := bar.ProvideBar(ctx)
+		if err != nil {
+			return err
+		}
+		select {
+		case barBarChan <- barBar:
+			break
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		return nil
+	})
+	bazBazChan := make(chan baz.Baz, 1)
+	g.Go(func() error {
+		bazBaz := baz.ProvideBaz(ctx)
+		select {
+		case bazBazChan <- bazBaz:
+			break
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		return nil
+	})
 	int2Chan := make(chan int, 1)
-	go func() {
-		int2 := provideFoo()
-		int2Chan <- int2
-	}()
-	return int2
+	g.Go(func() error {
+		var barBar bar.Bar
+		select {
+		case barBar = <-barBarChan:
+			break
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		var bazBaz baz.Baz
+		select {
+		case bazBaz = <-bazBazChan:
+			break
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		int2, err := provideFoo(barBar, bazBaz)
+		if err != nil {
+			return err
+		}
+		select {
+		case int2Chan <- int2:
+			break
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return 0, err
+	}
+	int2 := <-int2Chan
+	return int2, nil
 }

@@ -99,6 +99,7 @@ func Generate(ctx context.Context, wd string, env []string, patterns []string, o
 		generated[i].OutputPath = filepath.Join(outDir, opts.PrefixOutputFile+"wire_gen.go")
 		g := newGen(pkg)
 		injectorFiles, errs := generateInjectors(g, pkg)
+
 		if len(errs) > 0 {
 			generated[i].Errs = errs
 			continue
@@ -288,6 +289,7 @@ func (g *gen) frame(tags string) []byte {
 				fmt.Fprintf(&buf, "\t%q\n", path)
 			}
 		}
+		fmt.Fprintf(&buf, "\t%q\n", "golang.org/x/sync/errgroup")
 		buf.WriteString(")\n\n")
 	}
 	if len(g.anonImports) > 0 {
@@ -578,10 +580,11 @@ func (g *gen) p(format string, args ...interface{}) {
 type injectorGen struct {
 	g *gen
 
-	paramNames   []string
-	localNames   []string
-	cleanupNames []string
-	errVar       string
+	paramNames      []string
+	localNames      []string
+	localNameToType map[string]types.Type
+	cleanupNames    []string
+	errVar          string
 
 	// discard causes ig.p and ig.writeAST to no-op. Useful to run
 	// generation for side-effects like filling in g.imports.
@@ -591,6 +594,7 @@ type injectorGen struct {
 // injectPass generates an injector given the output from analysis.
 // The sig passed in should be verified.
 func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSet, doc *ast.CommentGroup, ig *injectorGen) {
+	ig.localNameToType = make(map[string]types.Type)
 	params := sig.Params()
 	injectSig, err := funcOutput(sig)
 	if err != nil {
@@ -634,10 +638,14 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 	default:
 		ig.p(") %s {\n", outTypeString)
 	}
+
+	ig.p("g, ctx := errgroup.WithContext(ctx)\n")
+
 	for i := range calls {
 		c := &calls[i]
 		lname := typeVariableName(c.out, "v", unexport, ig.nameInInjector)
 		ig.localNames = append(ig.localNames, lname)
+		ig.localNameToType[lname] = c.out
 		switch c.kind {
 		case structProvider:
 			ig.structProviderCall(lname, c)
@@ -658,8 +666,18 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 	if len(calls) == 0 {
 		ig.p("\treturn %s", ig.paramNames[set.For(injectSig.out).Arg().Index])
 	} else {
-		ig.p("\treturn %s", ig.localNames[len(calls)-1])
+		lastCallIdx := len(calls) - 1
+		lastCallLocalName := ig.localNames[lastCallIdx]
+		lastCall := calls[lastCallIdx]
+		if lastCall.async {
+			ig.p("if err := g.Wait(); err != nil {\n")
+			ig.p("\treturn %s, err\n", zeroValue(lastCall.out, ig.g.qualifyPkg))
+			ig.p("}\n")
+			ig.p("%s := <- %sChan\n", lastCallLocalName, lastCallLocalName)
+		}
+		ig.p("\treturn %s", lastCallLocalName)
 	}
+
 	if injectSig.cleanup {
 		ig.p(", func() {\n")
 		for i := len(ig.cleanupNames) - 1; i >= 0; i-- {
@@ -667,9 +685,11 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 		}
 		ig.p("\t}")
 	}
+
 	if injectSig.err {
 		ig.p(", nil")
 	}
+
 	ig.p("\n}\n\n")
 }
 
@@ -716,19 +736,21 @@ func (ig *injectorGen) funcProviderCall(lname string, c *call, injectSig outputS
 }
 
 func (ig *injectorGen) asyncFuncProviderCall(lname string, c *call, injectSig outputSignature) {
-	// add dependant count
-	ig.p("\t%sChan := make(chan %s, 1)\n", lname, c.out.String())
+	// todo add dependant count
+	ig.p("\t%sChan := make(chan %s, 1)\n", lname, types.TypeString(c.out, ig.g.qualifyPkg))
 
-	ig.p("\tgo func(){\n")
+	ig.p("\tg.Go(func() error {\n")
+
+	// read from previous params
+	for _, a := range c.args {
+		if a < len(ig.paramNames) {
+			//
+		} else {
+			ig.safeChanRead(ig.localNames[a-len(ig.paramNames)])
+		}
+	}
 
 	ig.p("\t%s", lname)
-
-	prevCleanup := len(ig.cleanupNames)
-	if c.hasCleanup {
-		cname := disambiguate("cleanup", ig.nameInInjector)
-		ig.cleanupNames = append(ig.cleanupNames, cname)
-		ig.p(", %s", cname)
-	}
 
 	if c.hasErr {
 		ig.p(", %s", ig.errVar)
@@ -753,21 +775,14 @@ func (ig *injectorGen) asyncFuncProviderCall(lname string, c *call, injectSig ou
 	ig.p(")\n")
 	if c.hasErr {
 		ig.p("\tif %s != nil {\n", ig.errVar)
-		for i := prevCleanup - 1; i >= 0; i-- {
-			ig.p("\t\t%s()\n", ig.cleanupNames[i])
-		}
-		ig.p("%sChan <- %s", lname, zeroValue(injectSig.out, ig.g.qualifyPkg))
-
-		if injectSig.cleanup {
-			ig.p(", nil")
-		}
-		ig.p(", err\n")
+		ig.p("\t\treturn %s", ig.errVar)
 		ig.p("\t}\n")
-	} else {
-		ig.p("%sChan <- %s", lname, lname)
 	}
 
-	ig.p("\t}()\n")
+	ig.safeChanWrite(lname)
+
+	ig.p("\treturn nil\n")
+	ig.p("\t})\n")
 }
 
 func (ig *injectorGen) structProviderCall(lname string, c *call) {
@@ -804,6 +819,27 @@ func (ig *injectorGen) fieldExpr(lname string, c *call) {
 	} else {
 		ig.p("%s.%s\n", ig.localNames[a-len(ig.paramNames)], c.name)
 	}
+}
+
+// safeChanRead generates a select that reads from <lname>Chan or ctx.Done(), whichever returns first
+func (ig *injectorGen) safeChanRead(lname string) {
+	ig.p("var %s %s\n", lname, types.TypeString(ig.localNameToType[lname], ig.g.qualifyPkg))
+	ig.p("select {\n")
+	ig.p("\tcase %s = <- %sChan:\n", lname, lname)
+	ig.p("\t\tbreak;\n")
+	ig.p("\tcase <- ctx.Done():\n")
+	ig.p("\t\treturn ctx.Err();\n")
+	ig.p("}\n")
+}
+
+// safeChanWrite generates a select that writes to <lname>Chan or returns if ctx.Done()
+func (ig *injectorGen) safeChanWrite(lname string) {
+	ig.p("select {\n")
+	ig.p("\tcase %sChan <- %s:\n", lname, lname)
+	ig.p("\t\tbreak;\n")
+	ig.p("\tcase <- ctx.Done():\n")
+	ig.p("\t\treturn ctx.Err();\n")
+	ig.p("}\n")
 }
 
 // nameInInjector reports whether name collides with any other identifier

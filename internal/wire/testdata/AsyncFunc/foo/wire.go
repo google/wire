@@ -18,10 +18,19 @@
 package main
 
 import (
+	"context"
+
 	"github.com/google/wire"
+
+	"example.com/bar"
+	"example.com/baz"
 )
 
-func injectFoo() int {
-	wire.Build(wire.AsyncFunc(provideFoo))
-	return 0
+func injectFoo(ctx context.Context) (int, error) {
+	wire.Build(
+		wire.AsyncFunc(bar.ProvideBar),
+		wire.AsyncFunc(baz.ProvideBaz),
+		wire.AsyncFunc(provideFoo),
+	)
+	return 0, nil
 }
