@@ -36,6 +36,7 @@ import (
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
+	"golang.org/x/tools/go/types/typeutil"
 )
 
 // GenerateResult stores the result for a package from a call to Generate.
@@ -651,7 +652,7 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 			ig.structProviderCall(lname, c)
 		case funcProviderCall:
 			if c.async {
-				ig.asyncFuncProviderCall(lname, c, injectSig)
+				ig.asyncFuncProviderCall(lname, c, set.providerDependantCounts, injectSig)
 			} else {
 				ig.funcProviderCall(lname, c, injectSig)
 			}
@@ -670,9 +671,13 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 		lastCallLocalName := ig.localNames[lastCallIdx]
 		lastCall := calls[lastCallIdx]
 		if lastCall.async {
-			ig.p("if err := g.Wait(); err != nil {\n")
-			ig.p("\treturn %s, err\n", zeroValue(lastCall.out, ig.g.qualifyPkg))
-			ig.p("}\n")
+			if !injectSig.err {
+				ig.p("g.Wait()\n")
+			} else {
+				ig.p("if err := g.Wait(); err != nil {\n")
+				ig.p("\treturn %s, err\n", zeroValue(lastCall.out, ig.g.qualifyPkg))
+				ig.p("}\n")
+			}
 			ig.p("%s := <- %sChan\n", lastCallLocalName, lastCallLocalName)
 		}
 		ig.p("\treturn %s", lastCallLocalName)
@@ -735,9 +740,12 @@ func (ig *injectorGen) funcProviderCall(lname string, c *call, injectSig outputS
 	}
 }
 
-func (ig *injectorGen) asyncFuncProviderCall(lname string, c *call, injectSig outputSignature) {
-	// todo add dependant count
-	ig.p("\t%sChan := make(chan %s, 1)\n", lname, types.TypeString(c.out, ig.g.qualifyPkg))
+func (ig *injectorGen) asyncFuncProviderCall(lname string, c *call, dependantCounts *typeutil.Map, injectSig outputSignature) {
+	bufCount := 1
+	if c := dependantCounts.At(c.out); c != nil {
+		bufCount = c.(int)
+	}
+	ig.p("\t%sChan := make(chan %s, %d)\n", lname, types.TypeString(c.out, ig.g.qualifyPkg), bufCount)
 
 	ig.p("\tg.Go(func() error {\n")
 
@@ -779,7 +787,7 @@ func (ig *injectorGen) asyncFuncProviderCall(lname string, c *call, injectSig ou
 		ig.p("\t}\n")
 	}
 
-	ig.safeChanWrite(lname)
+	ig.safeChanWrite(lname, bufCount)
 
 	ig.p("\treturn nil\n")
 	ig.p("\t})\n")
@@ -832,14 +840,21 @@ func (ig *injectorGen) safeChanRead(lname string) {
 	ig.p("}\n")
 }
 
-// safeChanWrite generates a select that writes to <lname>Chan or returns if ctx.Done()
-func (ig *injectorGen) safeChanWrite(lname string) {
+// safeChanWrite emits a select that writes to <lname>Chan or returns if ctx.Done()
+// send on the chan is done <times> times to account for more than one dependant on the value
+func (ig *injectorGen) safeChanWrite(lname string, times int) {
+	if times > 1 {
+		ig.p("for i := 1; i <= %d; i++{\n", times)
+	}
 	ig.p("select {\n")
 	ig.p("\tcase %sChan <- %s:\n", lname, lname)
 	ig.p("\t\tbreak;\n")
 	ig.p("\tcase <- ctx.Done():\n")
 	ig.p("\t\treturn ctx.Err();\n")
 	ig.p("}\n")
+	if times > 1 {
+		ig.p("}\n")
+	}
 }
 
 // nameInInjector reports whether name collides with any other identifier

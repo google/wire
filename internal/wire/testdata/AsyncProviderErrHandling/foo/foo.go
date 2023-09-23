@@ -12,25 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build wireinject
-// +build wireinject
-
 package main
 
 import (
 	"context"
-
-	"github.com/google/wire"
+	"fmt"
 
 	"example.com/bar"
-	"example.com/baz"
 )
 
-func injectFoo(ctx context.Context) (int, error) {
-	wire.Build(
-		wire.AsyncFunc(bar.ProvideBar),
-		wire.AsyncFunc(baz.ProvideBaz),
-		wire.AsyncFunc(provideFoo),
-	)
-	return 0, nil
+func main() {
+	_, err := injectFoo(context.Background())
+	fmt.Println(err)
+}
+
+func provideFoo(b bar.Bar) (int, error) {
+	return int(b), nil
 }

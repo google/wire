@@ -510,6 +510,25 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 	return ec.errors
 }
 
+// buildProviderDependantCounts creates a map of type to how many providers depend on that type
+func buildProviderDependantCounts(providerMap *typeutil.Map) *typeutil.Map {
+	counts := new(typeutil.Map) // to int
+	providerMap.Iterate(func(key types.Type, value interface{}) {
+		pt := value.(*ProvidedType)
+		if pt.p != nil {
+			for _, pi := range pt.p.Args {
+				count := counts.At(pi.Type)
+				if count == nil {
+					counts.Set(pi.Type, 1)
+				} else {
+					counts.Set(pi.Type, count.(int)+1)
+				}
+			}
+		}
+	})
+	return counts
+}
+
 // bindingConflictError creates a new error describing multiple bindings
 // for the same output type.
 func bindingConflictError(fset *token.FileSet, typ types.Type, set *ProviderSet, cur, prev *providerSetSrc) error {

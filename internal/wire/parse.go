@@ -113,6 +113,9 @@ type ProviderSet struct {
 	// srcMap maps from provided type to a *providerSetSrc capturing the
 	// Provider, Binding, Value, or Import that provided the type.
 	srcMap *typeutil.Map
+
+	// providerDependantCounts maps from provided type to an int which counts how many other providers depend on this type
+	providerDependantCounts *typeutil.Map
 }
 
 // Outputs returns a new slice containing the set of possible types the
@@ -648,6 +651,7 @@ func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast
 	if errs := verifyAcyclic(pset.providerMap, oc.hasher); len(errs) > 0 {
 		return nil, errs
 	}
+	pset.providerDependantCounts = buildProviderDependantCounts(pset.providerMap)
 	return pset, nil
 }
 

@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package baz
+package bar
 
 import "context"
 
-type Baz int
+type Bar int
 
-func ProvideBaz(ctx context.Context) Baz {
+func ProvideBar(ctx context.Context) Bar {
 	return 1
 }

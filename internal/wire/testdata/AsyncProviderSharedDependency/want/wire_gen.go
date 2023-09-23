@@ -15,25 +15,31 @@ import (
 
 // Injectors from wire.go:
 
-func injectFoo(ctx context.Context) (int, error) {
+func injectFoo(ctx context.Context) int {
 	g, ctx := errgroup.WithContext(ctx)
-	barBarChan := make(chan bar.Bar, 1)
+	barBarChan := make(chan bar.Bar, 2)
 	g.Go(func() error {
-		barBar, err := bar.ProvideBar(ctx)
-		if err != nil {
-			return err
-		}
-		select {
-		case barBarChan <- barBar:
-			break
-		case <-ctx.Done():
-			return ctx.Err()
+		barBar := bar.ProvideBar(ctx)
+		for i := 1; i <= 2; i++ {
+			select {
+			case barBarChan <- barBar:
+				break
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 		return nil
 	})
 	bazBazChan := make(chan baz.Baz, 1)
 	g.Go(func() error {
-		bazBaz := baz.ProvideBaz(ctx)
+		var barBar bar.Bar
+		select {
+		case barBar = <-barBarChan:
+			break
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		bazBaz := baz.ProvideBaz(ctx, barBar)
 		select {
 		case bazBazChan <- bazBaz:
 			break
@@ -58,10 +64,7 @@ func injectFoo(ctx context.Context) (int, error) {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-		int2, err := provideFoo(barBar, bazBaz)
-		if err != nil {
-			return err
-		}
+		int2 := provideFoo(barBar, bazBaz)
 		select {
 		case int2Chan <- int2:
 			break
@@ -70,9 +73,7 @@ func injectFoo(ctx context.Context) (int, error) {
 		}
 		return nil
 	})
-	if err := g.Wait(); err != nil {
-		return 0, err
-	}
+	g.Wait()
 	int2 := <-int2Chan
-	return int2, nil
+	return int2
 }
