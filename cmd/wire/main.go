@@ -31,8 +31,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/deliveroo/wire/internal/wire"
 	"github.com/google/subcommands"
-	"github.com/google/wire/internal/wire"
 	"github.com/pmezard/go-difflib/difflib"
 	"golang.org/x/tools/go/types/typeutil"
 )
