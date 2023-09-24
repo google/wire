@@ -556,10 +556,7 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 		switch fnObj.Name() {
 		case "AsyncFunc":
 			pset, errs := processAsyncFunc(oc.fset, info, call)
-			if len(errs) > 0 {
-				return nil, errs
-			}
-			return pset, nil
+			return pset, notePositionAll(exprPos, errs)
 		case "NewSet":
 			pset, errs := oc.processNewSet(info, pkgPath, call, nil, varName)
 			return pset, notePositionAll(exprPos, errs)
@@ -652,6 +649,7 @@ func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast
 		return nil, errs
 	}
 	pset.providerDependantCounts = buildProviderDependantCounts(pset.providerMap)
+	updateAsyncProviders(pset.providerMap)
 	return pset, nil
 }
 

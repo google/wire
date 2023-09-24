@@ -754,7 +754,7 @@ func (ig *injectorGen) asyncFuncProviderCall(lname string, c *call, dependantCou
 		if a < len(ig.paramNames) {
 			//
 		} else {
-			ig.safeChanRead(ig.localNames[a-len(ig.paramNames)])
+			ig.safeChanReceive(ig.localNames[a-len(ig.paramNames)])
 		}
 	}
 
@@ -787,7 +787,7 @@ func (ig *injectorGen) asyncFuncProviderCall(lname string, c *call, dependantCou
 		ig.p("\t}\n")
 	}
 
-	ig.safeChanWrite(lname, bufCount)
+	ig.safeChanSend(lname, bufCount)
 
 	ig.p("\treturn nil\n")
 	ig.p("\t})\n")
@@ -829,26 +829,24 @@ func (ig *injectorGen) fieldExpr(lname string, c *call) {
 	}
 }
 
-// safeChanRead generates a select that reads from <lname>Chan or ctx.Done(), whichever returns first
-func (ig *injectorGen) safeChanRead(lname string) {
+// safeChanReceive generates a select that receives from <lname>Chan or ctx.Done(), whichever returns first
+func (ig *injectorGen) safeChanReceive(lname string) {
 	ig.p("var %s %s\n", lname, types.TypeString(ig.localNameToType[lname], ig.g.qualifyPkg))
 	ig.p("select {\n")
 	ig.p("\tcase %s = <- %sChan:\n", lname, lname)
-	ig.p("\t\tbreak;\n")
 	ig.p("\tcase <- ctx.Done():\n")
 	ig.p("\t\treturn ctx.Err();\n")
 	ig.p("}\n")
 }
 
-// safeChanWrite emits a select that writes to <lname>Chan or returns if ctx.Done()
-// send on the chan is done <times> times to account for more than one dependant on the value
-func (ig *injectorGen) safeChanWrite(lname string, times int) {
+// safeChanSend emits a select that sends to <lname>Chan or returns if ctx.Done()
+// send on the chan is done <times> times to account for more than one dependant of the value sent
+func (ig *injectorGen) safeChanSend(lname string, times int) {
 	if times > 1 {
 		ig.p("for i := 1; i <= %d; i++{\n", times)
 	}
 	ig.p("select {\n")
 	ig.p("\tcase %sChan <- %s:\n", lname, lname)
-	ig.p("\t\tbreak;\n")
 	ig.p("\tcase <- ctx.Done():\n")
 	ig.p("\t\treturn ctx.Err();\n")
 	ig.p("}\n")

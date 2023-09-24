@@ -21,7 +21,6 @@ func injectFoo(ctx context.Context) int {
 		barBar := bar.ProvideBar(ctx)
 		select {
 		case barBarChan <- barBar:
-			break
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -32,14 +31,12 @@ func injectFoo(ctx context.Context) int {
 		var barBar bar.Bar
 		select {
 		case barBar = <-barBarChan:
-			break
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 		int2 := provideFoo(barBar)
 		select {
 		case int2Chan <- int2:
-			break
 		case <-ctx.Done():
 			return ctx.Err()
 		}

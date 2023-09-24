@@ -12,16 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package baz
+//go:build wireinject
+// +build wireinject
+
+package main
 
 import (
 	"context"
 
+	"github.com/google/wire"
+
 	"example.com/bar"
 )
 
-type Baz int
-
-func ProvideBaz(ctx context.Context, b bar.Bar) Baz {
-	return Baz(1) + Baz(b)
+func injectFoo(ctx context.Context) int {
+	wire.Build(
+		wire.AsyncFunc(bar.ProvideBar),
+		provideFoo,
+	)
+	return 0
 }

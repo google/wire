@@ -24,7 +24,6 @@ func injectFoo(ctx context.Context) (int, error) {
 		}
 		select {
 		case barBarChan <- barBar:
-			break
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -35,7 +34,6 @@ func injectFoo(ctx context.Context) (int, error) {
 		var barBar bar.Bar
 		select {
 		case barBar = <-barBarChan:
-			break
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -45,7 +43,6 @@ func injectFoo(ctx context.Context) (int, error) {
 		}
 		select {
 		case int2Chan <- int2:
-			break
 		case <-ctx.Done():
 			return ctx.Err()
 		}

@@ -513,20 +513,41 @@ func verifyAcyclic(providerMap *typeutil.Map, hasher typeutil.Hasher) []error {
 // buildProviderDependantCounts creates a map of type to how many providers depend on that type
 func buildProviderDependantCounts(providerMap *typeutil.Map) *typeutil.Map {
 	counts := new(typeutil.Map) // to int
-	providerMap.Iterate(func(key types.Type, value interface{}) {
+	providerMap.Iterate(func(_ types.Type, value interface{}) {
 		pt := value.(*ProvidedType)
-		if pt.p != nil {
-			for _, pi := range pt.p.Args {
-				count := counts.At(pi.Type)
-				if count == nil {
-					counts.Set(pi.Type, 1)
-				} else {
-					counts.Set(pi.Type, count.(int)+1)
-				}
+		if pt.p == nil {
+			return
+		}
+		for _, pi := range pt.p.Args {
+			count := counts.At(pi.Type)
+			if count == nil {
+				counts.Set(pi.Type, 1)
+			} else {
+				counts.Set(pi.Type, count.(int)+1)
 			}
 		}
 	})
 	return counts
+}
+
+// updateAsyncProviders sets Async: true on sync providers that rely on async providers
+func updateAsyncProviders(providerMap *typeutil.Map) {
+	providerMap.Iterate(func(_ types.Type, value interface{}) {
+		p := value.(*ProvidedType)
+		if p.p == nil {
+			// no need to continue for non provider functions
+			return
+		}
+		for _, arg := range p.p.Args {
+			argp := providerMap.At(arg.Type).(*ProvidedType)
+			if argp.p == nil {
+				continue
+			}
+			if argp.p.Async {
+				p.p.Async = true
+			}
+		}
+	})
 }
 
 // bindingConflictError creates a new error describing multiple bindings

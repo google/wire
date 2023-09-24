@@ -9,7 +9,6 @@ package main
 import (
 	"context"
 	"example.com/bar"
-	"example.com/baz"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -17,32 +16,11 @@ import (
 
 func injectFoo(ctx context.Context) int {
 	g, ctx := errgroup.WithContext(ctx)
-	barBarChan := make(chan bar.Bar, 2)
+	barBarChan := make(chan bar.Bar, 1)
 	g.Go(func() error {
 		barBar := bar.ProvideBar(ctx)
-		for i := 1; i <= 2; i++ {
-			select {
-			case barBarChan <- barBar:
-				break
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-		return nil
-	})
-	bazBazChan := make(chan baz.Baz, 1)
-	g.Go(func() error {
-		var barBar bar.Bar
 		select {
-		case barBar = <-barBarChan:
-			break
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-		bazBaz := baz.ProvideBaz(ctx, barBar)
-		select {
-		case bazBazChan <- bazBaz:
-			break
+		case barBarChan <- barBar:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -53,21 +31,12 @@ func injectFoo(ctx context.Context) int {
 		var barBar bar.Bar
 		select {
 		case barBar = <-barBarChan:
-			break
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-		var bazBaz baz.Baz
-		select {
-		case bazBaz = <-bazBazChan:
-			break
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-		int2 := provideFoo(barBar, bazBaz)
+		int2 := provideFoo(barBar)
 		select {
 		case int2Chan <- int2:
-			break
 		case <-ctx.Done():
 			return ctx.Err()
 		}
