@@ -290,7 +290,6 @@ func (g *gen) frame(tags string) []byte {
 				fmt.Fprintf(&buf, "\t%q\n", path)
 			}
 		}
-		fmt.Fprintf(&buf, "\t%q\n", "golang.org/x/sync/errgroup")
 		buf.WriteString(")\n\n")
 	}
 	if len(g.anonImports) > 0 {
@@ -640,7 +639,17 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 		ig.p(") %s {\n", outTypeString)
 	}
 
-	ig.p("g, ctx := errgroup.WithContext(ctx)\n")
+	needsErrgroup := false
+	for _, c := range calls {
+		if c.async {
+			needsErrgroup = true
+			ig.g.imports["golang.org/x/sync/errgroup"] = importInfo{}
+			break
+		}
+	}
+	if needsErrgroup {
+		ig.p("g, ctx := errgroup.WithContext(ctx)\n")
+	}
 
 	for i := range calls {
 		c := &calls[i]
@@ -670,6 +679,7 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 		lastCallIdx := len(calls) - 1
 		lastCallLocalName := ig.localNames[lastCallIdx]
 		lastCall := calls[lastCallIdx]
+		// todo tidy this up
 		if lastCall.async {
 			if !injectSig.err {
 				ig.p("g.Wait()\n")

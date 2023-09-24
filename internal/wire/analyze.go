@@ -533,14 +533,14 @@ func buildProviderDependantCounts(providerMap *typeutil.Map) *typeutil.Map {
 // updateAsyncProviders sets Async: true on sync providers that rely on async providers
 func updateAsyncProviders(providerMap *typeutil.Map) {
 	providerMap.Iterate(func(_ types.Type, value interface{}) {
-		p := value.(*ProvidedType)
-		if p.p == nil {
+		p, ok := value.(*ProvidedType)
+		if !ok || p.p == nil {
 			// no need to continue for non provider functions
 			return
 		}
 		for _, arg := range p.p.Args {
-			argp := providerMap.At(arg.Type).(*ProvidedType)
-			if argp.p == nil {
+			argp, ok := providerMap.At(arg.Type).(*ProvidedType)
+			if !ok || argp.p == nil {
 				continue
 			}
 			if argp.p.Async {
