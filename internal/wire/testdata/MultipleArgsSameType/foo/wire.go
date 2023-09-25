@@ -17,7 +17,7 @@
 package main
 
 import (
-	"github.com/google/wire"
+	"github.com/deliveroo/wire"
 )
 
 func inject(a, b string) *Foo {

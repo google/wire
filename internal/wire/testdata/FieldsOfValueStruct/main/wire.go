@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build wireinject
+//go:build wireinject
+// +build wireinject
 
 package main
 
@@ -22,7 +23,7 @@ import (
 	"example.com/bar"
 	"example.com/baz"
 	"example.com/foo"
-	"github.com/google/wire"
+	"github.com/deliveroo/wire"
 )
 
 func newBazService() *baz.Service {

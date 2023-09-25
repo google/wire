@@ -8,7 +8,7 @@ understand how to use Wire. The finished product may be found in the same
 directory as this README.
 
 [guestbook]: https://github.com/google/go-cloud/tree/master/samples/guestbook
-[guide]:     https://github.com/google/wire/blob/master/docs/guide.md
+[guide]:     https://github.com/deliveroo/wire/blob/master/docs/guide.md
 
 ## A First Pass of Building the Greeter Program
 
@@ -163,7 +163,7 @@ injector complete, we are ready to use the `wire` command line tool.
 Install the tool with:
 
 ``` shell
-go install github.com/google/wire/cmd/wire@latest
+go install github.com/deliveroo/wire/cmd/wire@latest
 ```
 
 Then in the same directory with the above code, simply run `wire`. Wire will
@@ -348,9 +348,9 @@ Running `wire`, we see the following:
 
 ``` shell
 # wrapping the error across lines for readability
-$GOPATH/src/github.com/google/wire/_tutorial/wire.go:24:1:
-inject InitializeEvent: no provider found for github.com/google/wire/_tutorial.Greeter
-(required by provider of github.com/google/wire/_tutorial.Event)
+$GOPATH/src/github.com/deliveroo/wire/_tutorial/wire.go:24:1:
+inject InitializeEvent: no provider found for github.com/deliveroo/wire/_tutorial.Greeter
+(required by provider of github.com/deliveroo/wire/_tutorial.Event)
 wire: generate failed
 ```
 
@@ -378,7 +378,7 @@ func InitializeEvent(phrase string) (Event, error) {
 Wire helpfully tells us that we have an unused provider:
 
 ``` shell
-$GOPATH/src/github.com/google/wire/_tutorial/wire.go:24:1:
+$GOPATH/src/github.com/deliveroo/wire/_tutorial/wire.go:24:1:
 inject InitializeEvent: unused provider "NewEventNumber"
 wire: generate failed
 ```
@@ -412,8 +412,8 @@ There is support for [binding interfaces][interfaces], [binding
 values][values], as well as support for [cleanup functions][cleanup]. See the
 [Advanced Features][advanced] section for more.
 
-[advanced]:   https://github.com/google/wire/blob/master/docs/guide.md#advanced-features
-[cleanup]:    https://github.com/google/wire/blob/master/docs/guide.md#cleanup-functions
-[interfaces]: https://github.com/google/wire/blob/master/docs/guide.md#binding-interfaces
-[sets]:       https://github.com/google/wire/blob/master/docs/guide.md#defining-providers
-[values]:     https://github.com/google/wire/blob/master/docs/guide.md#binding-values
+[advanced]:   https://github.com/deliveroo/wire/blob/master/docs/guide.md#advanced-features
+[cleanup]:    https://github.com/deliveroo/wire/blob/master/docs/guide.md#cleanup-functions
+[interfaces]: https://github.com/deliveroo/wire/blob/master/docs/guide.md#binding-interfaces
+[sets]:       https://github.com/deliveroo/wire/blob/master/docs/guide.md#defining-providers
+[values]:     https://github.com/deliveroo/wire/blob/master/docs/guide.md#binding-values

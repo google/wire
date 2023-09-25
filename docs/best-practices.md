@@ -103,7 +103,7 @@ the API client, and let `*http.Client` be an input of the provider set.
 
 There are two approaches for creating an injected app with mocked dependencies.
 Examples of both approaches are shown
-[here](https://github.com/google/wire/tree/master/internal/wire/testdata/ExampleWithMocks/foo).
+[here](https://github.com/deliveroo/wire/tree/master/internal/wire/testdata/ExampleWithMocks/foo).
 
 ### Approach A: Pass mocks to the injector
 

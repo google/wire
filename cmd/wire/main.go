@@ -14,7 +14,7 @@
 
 // Wire is a compile-time dependency injection tool.
 //
-// For an overview, see https://github.com/google/wire/blob/master/README.md
+// For an overview, see https://github.com/deliveroo/wire/blob/master/README.md
 package main
 
 import (

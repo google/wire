@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build wireinject
+//go:build wireinject
+// +build wireinject
 
 package main
 
 import (
-	"github.com/google/wire"
+	"github.com/deliveroo/wire"
 )
 
 func injectFoo() (Foo, error) {

@@ -14,7 +14,7 @@
 
 // Package wire contains directives for Wire code generation.
 // For an overview of working with Wire, see the user guide at
-// https://github.com/google/wire/blob/master/docs/guide.md
+// https://github.com/deliveroo/wire/blob/master/docs/guide.md
 //
 // The directives in this package are used as input to the Wire code generation
 // tool. The entry point of Wire's analysis are injector functions: function
@@ -115,7 +115,7 @@ func Bind(iface, to interface{}) Binding {
 }
 
 // bindToUsePointer is detected by the wire tool to indicate that Bind's second argument should take a pointer.
-// See https://github.com/google/wire/issues/120 for details.
+// See https://github.com/deliveroo/wire/issues/120 for details.
 const bindToUsePointer = true
 
 // A ProvidedValue is an expression that is copied to the generated injector.
@@ -131,13 +131,12 @@ func Value(interface{}) ProvidedValue {
 	return ProvidedValue{}
 }
 
-// AsyncFunc provides the type of the func asynchronously using a goroutine
+// AsyncFunc tells wire to execute the provided function inside a goroutine
+// That way following providers can continue to execute on the main goroutine
 //
 // Example:
 //
-//		wire.NewSet(
-//	   wire.AsyncFunc(ProvideFoo)
-//	 )
+// wire.NewSet(wire.AsyncFunc(ProvideFoo))
 func AsyncFunc(interface{}) ProvidedValue {
 	return ProvidedValue{}
 }

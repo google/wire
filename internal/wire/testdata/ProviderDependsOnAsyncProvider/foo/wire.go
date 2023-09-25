@@ -20,7 +20,7 @@ package main
 import (
 	"context"
 
-	"github.com/google/wire"
+	"github.com/deliveroo/wire"
 
 	"example.com/bar"
 )

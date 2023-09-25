@@ -17,7 +17,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/google/wire"
+	"github.com/deliveroo/wire"
 )
 
 func main() {
