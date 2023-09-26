@@ -1,60 +1,83 @@
-# Wire: Automated Initialization in Go
+# async-wire: A fork of wire for asynchronous dependency graphs
 
-[![Build Status](https://github.com/deliveroo/wire/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/deliveroo/wire/actions)
-[![godoc](https://godoc.org/github.com/deliveroo/wire?status.svg)][godoc]
-[![Coverage](https://codecov.io/gh/google/wire/branch/master/graph/badge.svg)](https://codecov.io/gh/google/wire)
+async-wire extends [google/wire](https://github.com/google/wire) by introducing a new provider type called `wire.AsyncFunc`.
+Functions wrapped by `AsyncFunc` are executed in a Goroutine. To synchronise inputs / outputs between providers, channels are used.
 
+## Project goals
 
-Wire is a code generation tool that automates connecting components using
-[dependency injection][]. Dependencies between components are represented in
-Wire as function parameters, encouraging explicit initialization instead of
-global variables. Because Wire operates without runtime state or reflection,
-code written to be used with Wire is useful even for hand-written
-initialization.
+1. First class support for asynchronous dependency graphs
+2. Compatibility with existing Wire features
+3. .dot file generation (TODO)
 
-For an overview, see the [introductory blog post][].
+## Extended API
 
-[dependency injection]: https://en.wikipedia.org/wiki/Dependency_injection
-[introductory blog post]: https://blog.golang.org/wire
-[godoc]: https://godoc.org/github.com/deliveroo/wire
-[travis]: https://travis-ci.com/google/wire
+```go
+// wire.go
 
-## Installing
+//go:build wireinject
+// +build wireinject
 
-Install Wire by running:
+type A int
+type B int
 
-```shell
-go install github.com/deliveroo/wire/cmd/wire@latest
+func Sum(ctx context.Context) (int, error) {
+	wire.Build(
+		wire.AsyncFunc(slowA),
+		wire.AsyncFunc(slowB),
+		sum,
+	)
+	return 0, nil
+}
+
+func slowA() A {
+  time.Sleep(1 * time.Second)
+  return A(1) 
+}
+
+func slowB() B {
+  time.Sleep(1 * time.Second)
+  return B(1) 
+}
+
+func sum(a A, b B) int {
+    return int(a) + int(b)
+}
+
+// wire_gen.go
+
+func Sum() (int, error) {
+    g, err := errgroup.WithContext(ctx)
+
+    aChan := make(chan A, 1)
+    g.Go(func() error {
+       a := slowA()
+       ...
+    })
+
+    bChan := make(chan B, 1)
+    g.Go(func() error {
+       b := slowB()
+       ...
+    })
+
+    sumChan := make(chan int, 1)
+    g.Go(func() error) {
+       ...
+       s := sum(a, b)
+       ...
+    }
+
+    if err := g.Wait(); err != nil {
+        return 0, err
+    }
+
+    return <-sumChan, nil
+}
+
+// app.go
+
+t := time.Now()
+s, err := Sum() 
+fmt.Printf("Sum = %d after %d second", s, time.Since(t).Seconds())
+// Sum = 2 after 1 second
 ```
-
-and ensuring that `$GOPATH/bin` is added to your `$PATH`.
-
-## Documentation
-
-- [Tutorial][]
-- [User Guide][]
-- [Best Practices][]
-- [FAQ][]
-
-[Tutorial]: ./_tutorial/README.md
-[Best Practices]: ./docs/best-practices.md
-[FAQ]: ./docs/faq.md
-[User Guide]: ./docs/guide.md
-
-## Project status
-
-As of version v0.3.0, Wire is *beta* and is considered feature complete. It
-works well for the tasks it was designed to perform, and we prefer to keep it
-as simple as possible.
-
-We'll not be accepting new features at this time, but will gladly accept bug
-reports and fixes.
-
-## Community
-
-For questions, please use [GitHub Discussions](https://github.com/deliveroo/wire/discussions).
-
-This project is covered by the Go [Code of Conduct][].
-
-[Code of Conduct]: ./CODE_OF_CONDUCT.md
-[go-cloud mailing list]: https://groups.google.com/forum/#!forum/go-cloud
