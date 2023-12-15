@@ -10,7 +10,7 @@ package main
 
 // initApp returns a real app.
 func initApp() *app {
-	mainTimer := _wireRealTimeValue
+	mainTimer := realTime{}
 	mainGreeter := greeter{
 		T: mainTimer,
 	}
@@ -19,10 +19,6 @@ func initApp() *app {
 	}
 	return mainApp
 }
-
-var (
-	_wireRealTimeValue = realTime{}
-)
 
 // initMockedAppFromArgs returns an app with mocked dependencies provided via
 // arguments (Approach A). Note that the argument's type is the interface

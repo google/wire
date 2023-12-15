@@ -13,10 +13,6 @@ import (
 // Injectors from wire.go:
 
 func injectedMessage() string {
-	string2 := _wireStringValue
+	string2 := bar.PublicMsg
 	return string2
 }
-
-var (
-	_wireStringValue = bar.PublicMsg
-)

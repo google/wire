@@ -9,11 +9,7 @@ package main
 // Injectors from wire.go:
 
 func injectFooBar() FooBar {
-	foo := _wireFooValue
+	foo := Foo(41)
 	fooBar := provideFooBar(foo)
 	return fooBar
 }
-
-var (
-	_wireFooValue = Foo(41)
-)

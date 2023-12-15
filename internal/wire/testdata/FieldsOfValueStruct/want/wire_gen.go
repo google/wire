@@ -16,7 +16,10 @@ import (
 // Injectors from wire.go:
 
 func newBazService() *baz.Service {
-	config := _wireConfigValue
+	config := &baz.Config{
+		Foo: &foo.Config{1},
+		Bar: &bar.Config{2},
+	}
 	fooConfig := config.Foo
 	service := foo.New(fooConfig)
 	barConfig := config.Bar
@@ -27,13 +30,6 @@ func newBazService() *baz.Service {
 	}
 	return bazService
 }
-
-var (
-	_wireConfigValue = &baz.Config{
-		Foo: &foo.Config{1},
-		Bar: &bar.Config{2},
-	}
-)
 
 // wire.go:
 
