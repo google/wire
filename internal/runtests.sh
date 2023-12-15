@@ -26,7 +26,7 @@ fi
 result=0
 if [[ "${RUNNER_OS:-}" == "Linux" ]]; then
   echo "Running Go tests (with coverage)..."
-  go test -mod=readonly -race CGO_ENABLED=1 -coverpkg=./... -coverprofile=coverage.out ./... || result=1
+  go test -mod=readonly -race -coverpkg=./... -coverprofile=coverage.out ./... || result=1
   if [ -f coverage.out ] && [ $result -eq 0 ]; then
     bash <(curl -s https://codecov.io/bash)
   fi
