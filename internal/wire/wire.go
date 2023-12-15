@@ -329,7 +329,6 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 		expr     ast.Expr
 		typeInfo *types.Info
 	}
-	var pendingVars []pendingVar
 	ec := new(errorCollector)
 	for i := range calls {
 		c := &calls[i]
@@ -354,15 +353,9 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 					fmt.Errorf("inject %s: value %s can't be used: %v", name, ts, err)))
 			}
 			if g.values[c.valueExpr] == "" {
-				t := c.valueTypeInfo.TypeOf(c.valueExpr)
-
-				name := typeVariableName(t, "", func(name string) string { return "_wire" + export(name) + "Value" }, g.nameInFileScope)
-				g.values[c.valueExpr] = name
-				pendingVars = append(pendingVars, pendingVar{
-					name:     name,
-					expr:     c.valueExpr,
-					typeInfo: c.valueTypeInfo,
-				})
+				var printValue strings.Builder
+				printer.Fprint(&printValue, g.pkg.Fset, g.rewritePkgRefs(c.valueTypeInfo, c.valueExpr))
+				g.values[c.valueExpr] = printValue.String()
 			}
 		}
 	}
@@ -381,15 +374,6 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 		errVar:  disambiguate("err", g.nameInFileScope),
 		discard: false,
 	})
-	if len(pendingVars) > 0 {
-		g.p("var (\n")
-		for _, pv := range pendingVars {
-			g.p("\t%s = ", pv.name)
-			g.writeAST(pv.typeInfo, pv.expr)
-			g.p("\n")
-		}
-		g.p(")\n\n")
-	}
 	return nil
 }
 
