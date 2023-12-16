@@ -33,6 +33,7 @@ const (
 	structProvider
 	valueExpr
 	selectorExpr
+	rawValueExpr
 )
 
 // A call represents a step of an injector function.  It may be either a
@@ -210,8 +211,12 @@ dfs:
 		case pv.IsValue():
 			v := pv.Value()
 			index.Set(curr.t, given.Len()+len(calls))
+			valueExprKind := valueExpr
+			if pv.v.RawValue == true {
+				valueExprKind = rawValueExpr
+			}
 			calls = append(calls, call{
-				kind:          valueExpr,
+				kind:          valueExprKind,
 				out:           curr.t,
 				valueExpr:     v.expr,
 				valueTypeInfo: v.info,

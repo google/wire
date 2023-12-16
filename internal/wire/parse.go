@@ -200,6 +200,8 @@ type Value struct {
 
 	// info is the type info for the expression.
 	info *types.Info
+
+	RawValue bool
 }
 
 // InjectorArg describes a specific argument passed to an injector function.
@@ -554,6 +556,12 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 			return b, nil
 		case "Value":
 			v, err := processValue(oc.fset, info, call)
+			if err != nil {
+				return nil, []error{notePosition(exprPos, err)}
+			}
+			return v, nil
+		case "RawValue":
+			v, err := processRawValue(oc.fset, info, call)
 			if err != nil {
 				return nil, []error{notePosition(exprPos, err)}
 			}
@@ -964,10 +972,56 @@ func processValue(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*V
 		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("argument to Value may not be an interface value (found %s); use InterfaceValue instead", types.TypeString(argType, nil)))
 	}
 	return &Value{
-		Pos:  call.Args[0].Pos(),
-		Out:  info.TypeOf(call.Args[0]),
-		expr: call.Args[0],
-		info: info,
+		Pos:      call.Args[0].Pos(),
+		Out:      info.TypeOf(call.Args[0]),
+		expr:     call.Args[0],
+		info:     info,
+		RawValue: false,
+	}, nil
+}
+
+func processRawValue(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*Value, error) {
+	// Assumes that call.Fun is wire.Value.
+
+	if len(call.Args) != 1 {
+		return nil, notePosition(fset.Position(call.Pos()), errors.New("call to Value takes exactly one argument"))
+	}
+	ok := true
+	ast.Inspect(call.Args[0], func(node ast.Node) bool {
+		switch expr := node.(type) {
+		case nil, *ast.ArrayType, *ast.BasicLit, *ast.BinaryExpr, *ast.ChanType, *ast.CompositeLit, *ast.FuncType, *ast.Ident, *ast.IndexExpr, *ast.InterfaceType, *ast.KeyValueExpr, *ast.MapType, *ast.ParenExpr, *ast.SelectorExpr, *ast.SliceExpr, *ast.StarExpr, *ast.StructType, *ast.TypeAssertExpr:
+			// Good!
+		case *ast.UnaryExpr:
+			if expr.Op == token.ARROW {
+				ok = false
+				return false
+			}
+		case *ast.CallExpr:
+			// Only acceptable if it's a type conversion.
+			if _, isFunc := info.TypeOf(expr.Fun).(*types.Signature); isFunc {
+				ok = false
+				return false
+			}
+		default:
+			ok = false
+			return false
+		}
+		return true
+	})
+	if !ok {
+		return nil, notePosition(fset.Position(call.Pos()), errors.New("argument to Value is too complex"))
+	}
+	// Result type can't be an interface type; use wire.InterfaceValue for that.
+	argType := info.TypeOf(call.Args[0])
+	if _, isInterfaceType := argType.Underlying().(*types.Interface); isInterfaceType {
+		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("argument to Value may not be an interface value (found %s); use InterfaceValue instead", types.TypeString(argType, nil)))
+	}
+	return &Value{
+		Pos:      call.Args[0].Pos(),
+		Out:      info.TypeOf(call.Args[0]),
+		expr:     call.Args[0],
+		info:     info,
+		RawValue: true,
 	}, nil
 }
 
@@ -993,10 +1047,11 @@ func processInterfaceValue(fset *token.FileSet, info *types.Info, call *ast.Call
 		return nil, notePosition(fset.Position(call.Pos()), fmt.Errorf("%s does not implement %s", types.TypeString(provided, nil), types.TypeString(iface, nil)))
 	}
 	return &Value{
-		Pos:  call.Args[1].Pos(),
-		Out:  iface,
-		expr: call.Args[1],
-		info: info,
+		Pos:      call.Args[1].Pos(),
+		Out:      iface,
+		expr:     call.Args[1],
+		info:     info,
+		RawValue: false,
 	}, nil
 }
 
@@ -1173,9 +1228,9 @@ func (pt ProvidedType) IsNil() bool {
 //
 //   - For a function provider, this is the first return value type.
 //   - For a struct provider, this is either the struct type or the pointer type
-// 	   whose element type is the struct type.
-// 	 - For a value, this is the type of the expression.
-// 	 - For an argument, this is the type of the argument.
+//     whose element type is the struct type.
+//   - For a value, this is the type of the expression.
+//   - For an argument, this is the type of the argument.
 func (pt ProvidedType) Type() types.Type {
 	return pt.t
 }

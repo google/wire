@@ -9,6 +9,10 @@ package main
 // Injectors from wire.go:
 
 func injectFoo() Foo {
-	foo := Foo{X: 42}
+	foo := _wireFooValue
 	return foo
 }
+
+var (
+	_wireFooValue = Foo{X: 42}
+)

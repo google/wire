@@ -14,6 +14,10 @@ import (
 // Injectors from wire.go:
 
 func injectedReader() io.Reader {
-	reader := strings.NewReader("hello world")
+	reader := _wireReaderValue
 	return reader
 }
+
+var (
+	_wireReaderValue = strings.NewReader("hello world")
+)

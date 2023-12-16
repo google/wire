@@ -14,6 +14,10 @@ import (
 // Injectors from wire.go:
 
 func inject() io.Writer {
-	file := os.Stdout
+	file := _wireFileValue
 	return file
 }
+
+var (
+	_wireFileValue = os.Stdout
+)

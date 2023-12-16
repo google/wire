@@ -329,6 +329,7 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 		expr     ast.Expr
 		typeInfo *types.Info
 	}
+	var pendingVars []pendingVar
 	ec := new(errorCollector)
 	for i := range calls {
 		c := &calls[i]
@@ -345,6 +346,25 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 				fmt.Errorf("inject %s: provider for %s returns error but injection not allowed to fail", name, ts)))
 		}
 		if c.kind == valueExpr {
+			if err := accessibleFrom(c.valueTypeInfo, c.valueExpr, g.pkg.PkgPath); err != nil {
+				// TODO(light): Display line number of value expression.
+				ts := types.TypeString(c.out, nil)
+				ec.add(notePosition(
+					g.pkg.Fset.Position(pos),
+					fmt.Errorf("inject %s: value %s can't be used: %v", name, ts, err)))
+			}
+			if g.values[c.valueExpr] == "" {
+				t := c.valueTypeInfo.TypeOf(c.valueExpr)
+
+				name := typeVariableName(t, "", func(name string) string { return "_wire" + export(name) + "Value" }, g.nameInFileScope)
+				g.values[c.valueExpr] = name
+				pendingVars = append(pendingVars, pendingVar{
+					name:     name,
+					expr:     c.valueExpr,
+					typeInfo: c.valueTypeInfo,
+				})
+			}
+		} else if c.kind == rawValueExpr {
 			if err := accessibleFrom(c.valueTypeInfo, c.valueExpr, g.pkg.PkgPath); err != nil {
 				// TODO(light): Display line number of value expression.
 				ts := types.TypeString(c.out, nil)
@@ -374,6 +394,15 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 		errVar:  disambiguate("err", g.nameInFileScope),
 		discard: false,
 	})
+	if len(pendingVars) > 0 {
+		g.p("var (\n")
+		for _, pv := range pendingVars {
+			g.p("\t%s = ", pv.name)
+			g.writeAST(pv.typeInfo, pv.expr)
+			g.p("\n")
+		}
+		g.p(")\n\n")
+	}
 	return nil
 }
 
@@ -628,6 +657,8 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 		case funcProviderCall:
 			ig.funcProviderCall(lname, c, injectSig)
 		case valueExpr:
+			ig.valueExpr(lname, c)
+		case rawValueExpr:
 			ig.valueExpr(lname, c)
 		case selectorExpr:
 			ig.fieldExpr(lname, c)
