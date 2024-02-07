@@ -35,6 +35,7 @@ import (
 // Exactly one of the fields will be set.
 type providerSetSrc struct {
 	Provider    *Provider
+	AutoBinding *AutoBinding
 	Binding     *IfaceBinding
 	Value       *Value
 	Import      *ProviderSet
@@ -57,6 +58,8 @@ func (p *providerSetSrc) description(fset *token.FileSet, typ types.Type) string
 			kind = "struct provider"
 		}
 		return fmt.Sprintf("%s %s(%s)", kind, quoted(p.Provider.Name), fset.Position(p.Provider.Pos))
+	case p.AutoBinding != nil:
+		return fmt.Sprintf("wire.AutoBind (%s)", fset.Position(p.AutoBinding.Pos))
 	case p.Binding != nil:
 		return fmt.Sprintf("wire.Bind (%s)", fset.Position(p.Binding.Pos))
 	case p.Value != nil:
@@ -98,11 +101,12 @@ type ProviderSet struct {
 	// variable.
 	VarName string
 
-	Providers []*Provider
-	Bindings  []*IfaceBinding
-	Values    []*Value
-	Fields    []*Field
-	Imports   []*ProviderSet
+	Providers    []*Provider
+	Bindings     []*IfaceBinding
+	AutoBindings []*AutoBinding
+	Values       []*Value
+	Fields       []*Field
+	Imports      []*ProviderSet
 	// InjectorArgs is only filled in for wire.Build.
 	InjectorArgs *InjectorArgs
 
@@ -125,6 +129,22 @@ func (set *ProviderSet) Outputs() []types.Type {
 func (set *ProviderSet) For(t types.Type) ProvidedType {
 	pt := set.providerMap.At(t)
 	if pt == nil {
+		// if t is an interface, we may have an AutoBinding that implements it.
+		iface, ok := t.Underlying().(*types.Interface)
+		if !ok {
+			return ProvidedType{}
+		}
+
+		for _, ab := range set.AutoBindings {
+			if types.Implements(ab.Concrete, iface) {
+				// cache for later
+				pt := &ProvidedType{t: ab.Concrete, ab: ab}
+				set.providerMap.Set(t, pt)
+				set.srcMap.Set(t, &providerSetSrc{AutoBinding: ab})
+				return *pt
+			}
+		}
+
 		return ProvidedType{}
 	}
 	return *pt.(*ProvidedType)
@@ -177,6 +197,17 @@ type Provider struct {
 	// HasErr reports whether the provider function can return an error.
 	// (Always false for structs.)
 	HasErr bool
+}
+
+// AutoBinding records the signature of a provider eligible for auto-binding
+// to interfaces it implements. A provider is a single Go object, either a
+// function or a named type.
+type AutoBinding struct {
+	// Concrete is always a type that implements N number of interfaces.
+	Concrete types.Type
+
+	// Pos is the position where the binding was declared.
+	Pos token.Pos
 }
 
 // ProviderInput describes an incoming edge in the provider graph.
@@ -520,7 +551,7 @@ func (oc *objectCache) varDecl(obj *types.Var) *ast.ValueSpec {
 }
 
 // processExpr converts an expression into a Wire structure. It may return a
-// *Provider, an *IfaceBinding, a *ProviderSet, a *Value or a []*Field.
+// *Provider, an *AutoBinding, an *IfaceBinding, a *ProviderSet, a *Value or a []*Field.
 func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Expr, varName string) (interface{}, []error) {
 	exprPos := oc.fset.Position(expr.Pos())
 	expr = astutil.Unparen(expr)
@@ -546,6 +577,12 @@ func (oc *objectCache) processExpr(info *types.Info, pkgPath string, expr ast.Ex
 		case "NewSet":
 			pset, errs := oc.processNewSet(info, pkgPath, call, nil, varName)
 			return pset, notePositionAll(exprPos, errs)
+		case "AutoBind":
+			abs, err := processAutoBind(oc.fset, info, call)
+			if err != nil {
+				return nil, []error{notePosition(exprPos, err)}
+			}
+			return abs, nil
 		case "Bind":
 			b, err := processBind(oc.fset, info, call)
 			if err != nil {
@@ -607,6 +644,8 @@ func (oc *objectCache) processNewSet(info *types.Info, pkgPath string, call *ast
 			continue
 		}
 		switch item := item.(type) {
+		case *AutoBinding:
+			pset.AutoBindings = append(pset.AutoBindings, item)
 		case *Provider:
 			pset.Providers = append(pset.Providers, item)
 		case *ProviderSet:
@@ -880,6 +919,41 @@ func isPrevented(tag string) bool {
 	return reflect.StructTag(tag).Get("wire") == "-"
 }
 
+func processAutoBind(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*AutoBinding, error) {
+	// Assumes that call.Fun is wire.AutoBind.
+
+	if len(call.Args) != 1 {
+		return nil, notePosition(fset.Position(call.Pos()),
+			errors.New("call to AutoBind takes exactly one argument"))
+	}
+	const firstArgReqFormat = "first argument to AutoBind must be a pointer to a type; found %s"
+	typ := info.TypeOf(call.Args[0])
+	ptr, ok := typ.(*types.Pointer)
+	if !ok {
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf(firstArgReqFormat, types.TypeString(typ, nil)))
+	}
+
+	switch ptr.Elem().Underlying().(type) {
+	case *types.Named,
+		*types.Struct,
+		*types.Basic:
+		// good!
+
+	default:
+		return nil, notePosition(fset.Position(call.Pos()),
+			fmt.Errorf(firstArgReqFormat, types.TypeString(ptr, nil)))
+	}
+
+	typeExpr := call.Args[0].(*ast.CallExpr)
+	typeName := qualifiedIdentObject(info, typeExpr.Args[0]) // should be either an identifier or selector
+	autoBinding := &AutoBinding{
+		Concrete: ptr,
+		Pos:      typeName.Pos(),
+	}
+	return autoBinding, nil
+}
+
 // processBind creates an interface binding from a wire.Bind call.
 func processBind(fset *token.FileSet, info *types.Info, call *ast.CallExpr) (*IfaceBinding, error) {
 	// Assumes that call.Fun is wire.Bind.
@@ -1122,7 +1196,6 @@ func findInjectorBuild(info *types.Info, fn *ast.FuncDecl) (*ast.CallExpr, error
 		default:
 			invalid = true
 		}
-
 	}
 	if wireBuildCall == nil {
 		return nil, nil
@@ -1157,16 +1230,17 @@ func isProviderSetType(t types.Type) bool {
 // none of the above, and returns true for IsNil.
 type ProvidedType struct {
 	// t is the provided concrete type.
-	t types.Type
-	p *Provider
-	v *Value
-	a *InjectorArg
-	f *Field
+	t  types.Type
+	p  *Provider
+	ab *AutoBinding
+	v  *Value
+	a  *InjectorArg
+	f  *Field
 }
 
 // IsNil reports whether pt is the zero value.
 func (pt ProvidedType) IsNil() bool {
-	return pt.p == nil && pt.v == nil && pt.a == nil && pt.f == nil
+	return pt.p == nil && pt.ab == nil && pt.v == nil && pt.a == nil && pt.f == nil
 }
 
 // Type returns the output type.
@@ -1183,6 +1257,11 @@ func (pt ProvidedType) Type() types.Type {
 // IsProvider reports whether pt points to a Provider.
 func (pt ProvidedType) IsProvider() bool {
 	return pt.p != nil
+}
+
+// IsAutoBinding reports whether pt points to an AutoBinding.
+func (pt ProvidedType) IsAutoBinding() bool {
+	return pt.ab != nil
 }
 
 // IsValue reports whether pt points to a Value.
@@ -1207,6 +1286,15 @@ func (pt ProvidedType) Provider() *Provider {
 		panic("ProvidedType does not hold a Provider")
 	}
 	return pt.p
+}
+
+// AutoBinding returns pt as a AutoBinding pointer. It panics if pt does not point
+// to a AutoBinding.
+func (pt ProvidedType) AutoBinding() *AutoBinding {
+	if pt.ab == nil {
+		panic("ProvidedType does not hold an AutoBinding")
+	}
+	return pt.ab
 }
 
 // Value returns pt as a Value pointer. It panics if pt does not point
