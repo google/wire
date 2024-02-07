@@ -425,6 +425,7 @@ type objectCache struct {
 
 type objRef struct {
 	importPath string
+	recvType   string
 	name       string
 }
 
@@ -493,6 +494,10 @@ func (oc *objectCache) get(obj types.Object) (val interface{}, errs []error) {
 		pkgPath := obj.Pkg().Path()
 		return oc.processExpr(oc.packages[pkgPath].TypesInfo, pkgPath, spec.Values[i], obj.Name())
 	case *types.Func:
+		sig := obj.Type().(*types.Signature)
+		if recv := sig.Recv(); recv != nil {
+			ref.recvType = recv.Type().String()
+		}
 		return processFuncProvider(oc.fset, obj)
 	default:
 		return nil, []error{fmt.Errorf("%v is not a provider or a provider set", obj)}
@@ -659,14 +664,42 @@ func qualifiedIdentObject(info *types.Info, expr ast.Expr) types.Object {
 	case *ast.Ident:
 		return info.ObjectOf(expr)
 	case *ast.SelectorExpr:
-		pkgName, ok := expr.X.(*ast.Ident)
-		if !ok {
+		x := astutil.Unparen(expr.X)
+		if star, ok := x.(*ast.StarExpr); ok {
+			x = star.X
+		}
+		switch x := x.(type) {
+		case *ast.Ident:
+			switch obj := info.ObjectOf(x); obj.(type) {
+			case *types.PkgName:
+			case *types.TypeName:
+				named, ok := obj.Type().(*types.Named)
+				if !ok {
+					return nil
+				}
+
+				t := named.Underlying()
+				if ptr, ok := t.(*types.Pointer); ok {
+					t = ptr.Elem()
+				}
+			default:
+				return nil
+			}
+
+			return info.ObjectOf(expr.Sel)
+		case *ast.SelectorExpr:
+			pkgName, ok := x.X.(*ast.Ident)
+			if !ok {
+				return nil
+			}
+			if _, ok := info.ObjectOf(pkgName).(*types.PkgName); !ok {
+				return nil
+			}
+			return info.ObjectOf(expr.Sel)
+		default:
 			return nil
 		}
-		if _, ok := info.ObjectOf(pkgName).(*types.PkgName); !ok {
-			return nil
-		}
-		return info.ObjectOf(expr.Sel)
+
 	default:
 		return nil
 	}
@@ -680,7 +713,17 @@ func processFuncProvider(fset *token.FileSet, fn *types.Func) (*Provider, []erro
 	if err != nil {
 		return nil, []error{notePosition(fset.Position(fpos), fmt.Errorf("wrong signature for provider %s: %v", fn.Name(), err))}
 	}
+
 	params := sig.Params()
+	if recv := sig.Recv(); recv != nil {
+		newParams := make([]*types.Var, params.Len()+1)
+		newParams[0] = recv
+		for i := 0; i < params.Len(); i++ {
+			newParams[i+1] = params.At(i)
+		}
+		params = types.NewTuple(newParams...)
+	}
+
 	provider := &Provider{
 		Pkg:        fn.Pkg(),
 		Name:       fn.Name(),
@@ -691,6 +734,7 @@ func processFuncProvider(fset *token.FileSet, fn *types.Func) (*Provider, []erro
 		HasCleanup: providerSig.cleanup,
 		HasErr:     providerSig.err,
 	}
+
 	for i := 0; i < params.Len(); i++ {
 		provider.Args[i] = ProviderInput{
 			Type: params.At(i).Type(),
