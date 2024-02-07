@@ -7,12 +7,9 @@
 package main
 
 import (
-	"example.com/bar"
-)
-
-import (
 	_ "example.com/anon1"
 	_ "example.com/anon2"
+	"example.com/bar"
 )
 
 // Injectors from wire.go:
