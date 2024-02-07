@@ -52,25 +52,22 @@ func main() {
 	log.SetPrefix("wire: ")
 	log.SetOutput(os.Stderr)
 
-	// TODO(rvangent): Use subcommands's VisitCommands instead of hardcoded map,
-	// once there is a release that contains it:
-	// allCmds := map[string]bool{}
-	// subcommands.DefaultCommander.VisitCommands(func(_ *subcommands.CommandGroup, cmd subcommands.Command) { allCmds[cmd.Name()] = true })
-	allCmds := map[string]bool{
-		"commands": true, // builtin
-		"help":     true, // builtin
-		"flags":    true, // builtin
-		"check":    true,
-		"diff":     true,
-		"gen":      true,
-		"show":     true,
+	if args := flag.Args(); len(args) != 0 {
+		argCmd := args[0]
+		subcommands.DefaultCommander.VisitCommands(func(cg *subcommands.CommandGroup, cmd subcommands.Command) {
+			if cg.Name() != "" {
+				return
+			}
+			if cmd.Name() == argCmd {
+				// Execute command from argument.
+				os.Exit(int(subcommands.Execute(context.Background())))
+			}
+		})
 	}
+
 	// Default to running the "gen" command.
-	if args := flag.Args(); len(args) == 0 || !allCmds[args[0]] {
-		genCmd := &genCmd{}
-		os.Exit(int(genCmd.Execute(context.Background(), flag.CommandLine)))
-	}
-	os.Exit(int(subcommands.Execute(context.Background())))
+	genCmd := &genCmd{}
+	os.Exit(int(genCmd.Execute(context.Background(), flag.CommandLine)))
 }
 
 // packages returns the slice of packages to run wire over based on f.
