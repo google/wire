@@ -463,7 +463,6 @@ type testCase struct {
 //			program_out.txt
 //					expected output from the final compiled program,
 //					missing if wire_errs.txt is present
-//
 func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 	name := filepath.Base(root)
 	pkg, err := ioutil.ReadFile(filepath.Join(root, "pkg"))
