@@ -263,6 +263,13 @@ func copyAST(original ast.Node) ast.Node {
 				Index:  exprFromMap(m, node.Index),
 				Rbrack: node.Rbrack,
 			}
+		case *ast.IndexListExpr:
+			m[node] = &ast.IndexListExpr{
+				X:       exprFromMap(m, node.X),
+				Lbrack:  node.Lbrack,
+				Indices: copyExprList(m, node.Indices),
+				Rbrack:  node.Rbrack,
+			}
 		case *ast.InterfaceType:
 			m[node] = &ast.InterfaceType{
 				Interface:  node.Interface,
