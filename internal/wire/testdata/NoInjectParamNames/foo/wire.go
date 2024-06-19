@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build wireinject
+//go:build wireinject
+// +build wireinject
 
 package main
 
 import (
 	stdcontext "context"
 
-	"github.com/google/wire"
+	"github.com/osousa/drato"
 )
 
 // The notable characteristic of this test is that there are no

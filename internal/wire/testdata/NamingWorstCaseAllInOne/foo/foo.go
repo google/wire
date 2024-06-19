@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build wireinject
+//go:build wireinject
+// +build wireinject
 
 // This file is specifically designed to cause issues with copying the
 // AST, particularly with the identifier "context".
@@ -25,7 +26,7 @@ import (
 	"os"
 	"reflect"
 
-	"github.com/google/wire"
+	wire "github.com/osousa/drato"
 )
 
 type context struct{}

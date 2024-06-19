@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/wire"
+	wire "github.com/osousa/drato"
 )
 
 func main() {

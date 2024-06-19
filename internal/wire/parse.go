@@ -768,7 +768,7 @@ func processStructLiteralProvider(fset *token.FileSet, typeName *types.TypeName)
 
 	pos := typeName.Pos()
 	fmt.Fprintf(os.Stderr,
-		"Warning: %v, see https://godoc.org/github.com/google/wire#Struct for more information.\n",
+		"Warning: %v, see https://godoc.org/github.com/osousa/drato#Struct for more information.\n",
 		notePosition(fset.Position(pos),
 			fmt.Errorf("using struct literal to inject %s is deprecated and will be removed in the next release; use wire.Struct instead",
 				typeName.Type())))
@@ -1001,9 +1001,86 @@ func processInterfaceValue(fset *token.FileSet, info *types.Info, call *ast.Call
 }
 
 // processFieldsOf creates a slice of fields from a wire.FieldsOf call.
+// func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) ([]*Field, error) {
+// 	// Assumes that call.Fun is wire.FieldsOf.
+//
+// 	if len(call.Args) < 2 {
+// 		return nil, notePosition(fset.Position(call.Pos()),
+// 			errors.New("call to FieldsOf must specify fields to be extracted"))
+// 	}
+// 	const firstArgReqFormat = "first argument to FieldsOf must be a pointer to a struct or a pointer to a pointer to a struct; found %s"
+// 	structType := info.TypeOf(call.Args[0])
+// 	structPtr, ok := structType.(*types.Pointer)
+// 	if !ok {
+// 		return nil, notePosition(fset.Position(call.Pos()),
+// 			fmt.Errorf(firstArgReqFormat, types.TypeString(structType, nil)))
+// 	}
+//
+// 	var struc *types.Struct
+// 	isPtrToStruct := false
+// 	switch t := structPtr.Elem().Underlying().(type) {
+// 	case *types.Pointer:
+// 		struc, ok = t.Elem().Underlying().(*types.Struct)
+// 		if !ok {
+// 			return nil, notePosition(fset.Position(call.Pos()),
+// 				fmt.Errorf(firstArgReqFormat, types.TypeString(struc, nil)))
+// 		}
+// 		isPtrToStruct = true
+// 	case *types.Struct:
+// 		struc = t
+// 	default:
+// 		return nil, notePosition(fset.Position(call.Pos()),
+// 			fmt.Errorf(firstArgReqFormat, types.TypeString(t, nil)))
+// 	}
+// 	if struc.NumFields() < len(call.Args)-1 {
+// 		return nil, notePosition(fset.Position(call.Pos()),
+// 			fmt.Errorf("fields number exceeds the number available in the struct which has %d fields", struc.NumFields()))
+// 	}
+//
+// 	fields := make([]*Field, 0, len(call.Args)-1)
+// 	for i := 1; i < len(call.Args); i++ {
+// 		v, err := checkField(call.Args[i], struc)
+// 		if err != nil {
+// 			return nil, notePosition(fset.Position(call.Pos()), err)
+// 		}
+// 		out := []types.Type{v.Type()}
+// 		if isPtrToStruct {
+// 			// If the field is from a pointer to a struct, then
+// 			// wire.Fields also provides a pointer to the field.
+// 			out = append(out, types.NewPointer(v.Type()))
+// 		}
+// 		fields = append(fields, &Field{
+// 			Parent: structPtr.Elem(),
+// 			Name:   v.Name(),
+// 			Pkg:    v.Pkg(),
+// 			Pos:    v.Pos(),
+// 			Out:    out,
+// 		})
+// 	}
+// 	return fields, nil
+// }
+
+// checkField reports whether f is a field of st. f should be a string with the
+// field name.
+func checkField(f ast.Expr, st *types.Struct) (*types.Var, error) {
+	b, ok := f.(*ast.BasicLit)
+	if !ok {
+		return nil, fmt.Errorf("%v must be a string with the field name", f)
+	}
+	for i := 0; i < st.NumFields(); i++ {
+		if strings.EqualFold(strconv.Quote(st.Field(i).Name()), b.Value) {
+			if isPrevented(st.Tag(i)) {
+				return nil, fmt.Errorf("%s is prevented from injecting by wire", b.Value)
+			}
+			return st.Field(i), nil
+		}
+	}
+	return nil, fmt.Errorf("%s is not a field of %s", b.Value, st.String())
+}
+
+// processFieldsOf creates a slice of fields from a wire.FieldsOf call.
 func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) ([]*Field, error) {
 	// Assumes that call.Fun is wire.FieldsOf.
-
 	if len(call.Args) < 2 {
 		return nil, notePosition(fset.Position(call.Pos()),
 			errors.New("call to FieldsOf must specify fields to be extracted"))
@@ -1032,14 +1109,28 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 		return nil, notePosition(fset.Position(call.Pos()),
 			fmt.Errorf(firstArgReqFormat, types.TypeString(t, nil)))
 	}
-	if struc.NumFields() < len(call.Args)-1 {
+
+	fieldsToProcess := call.Args[1:]
+	if len(call.Args) == 2 {
+		if ident, ok := call.Args[1].(*ast.BasicLit); ok && ident.Value == `"*"` {
+			fieldsToProcess = make([]ast.Expr, struc.NumFields())
+			for i := 0; i < struc.NumFields(); i++ {
+				fieldsToProcess[i] = &ast.BasicLit{
+					Value: strconv.Quote(struc.Field(i).Name()),
+					Kind:  token.STRING,
+				}
+			}
+		}
+	}
+
+	if struc.NumFields() < len(fieldsToProcess) {
 		return nil, notePosition(fset.Position(call.Pos()),
 			fmt.Errorf("fields number exceeds the number available in the struct which has %d fields", struc.NumFields()))
 	}
 
-	fields := make([]*Field, 0, len(call.Args)-1)
-	for i := 1; i < len(call.Args); i++ {
-		v, err := checkField(call.Args[i], struc)
+	fields := make([]*Field, 0, len(fieldsToProcess))
+	for _, arg := range fieldsToProcess {
+		v, err := checkField(arg, struc)
 		if err != nil {
 			return nil, notePosition(fset.Position(call.Pos()), err)
 		}
@@ -1062,21 +1153,26 @@ func processFieldsOf(fset *token.FileSet, info *types.Info, call *ast.CallExpr) 
 
 // checkField reports whether f is a field of st. f should be a string with the
 // field name.
-func checkField(f ast.Expr, st *types.Struct) (*types.Var, error) {
-	b, ok := f.(*ast.BasicLit)
-	if !ok {
-		return nil, fmt.Errorf("%v must be a string with the field name", f)
-	}
-	for i := 0; i < st.NumFields(); i++ {
-		if strings.EqualFold(strconv.Quote(st.Field(i).Name()), b.Value) {
-			if isPrevented(st.Tag(i)) {
-				return nil, fmt.Errorf("%s is prevented from injecting by wire", b.Value)
-			}
-			return st.Field(i), nil
-		}
-	}
-	return nil, fmt.Errorf("%s is not a field of %s", b.Value, st.String())
-}
+// func checkField(f ast.Expr, st *types.Struct) (*types.Var, error) {
+// 	b, ok := f.(*ast.BasicLit)
+// 	if !ok {
+// 		return nil, fmt.Errorf("%v must be a string with the field name", f)
+// 	}
+// 	fieldName, err := strconv.Unquote(b.Value)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("invalid field name %v", b.Value)
+// 	}
+// 	for i := 0; i < st.NumFields(); i++ {
+// 		if st.Field(i).Name() == fieldName {
+// 			if isPrevented(st.Tag(i)) {
+// 				return nil, fmt.Errorf("%s is prevented from injecting by wire", fieldName)
+// 			}
+// 			return st.Field(i), nil
+// 		}
+// 	}
+//
+// 	return nil, fmt.Errorf("%s is NOT a field of %s", fieldName, st.String())
+// }
 
 // findInjectorBuild returns the wire.Build call if fn is an injector template.
 // It returns nil if the function is not an injector template.
@@ -1139,7 +1235,7 @@ func isWireImport(path string) bool {
 	if i := strings.LastIndex(path, vendorPart); i != -1 && (i == 0 || path[i-1] == '/') {
 		path = path[i+len(vendorPart):]
 	}
-	return path == "github.com/google/wire"
+	return path == "github.com/osousa/drato"
 }
 
 func isProviderSetType(t types.Type) bool {
