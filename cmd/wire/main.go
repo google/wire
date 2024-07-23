@@ -101,6 +101,7 @@ type genCmd struct {
 	headerFile     string
 	prefixFileName string
 	tags           string
+	mode           string
 }
 
 func (*genCmd) Name() string { return "gen" }
@@ -119,6 +120,7 @@ func (cmd *genCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&cmd.headerFile, "header_file", "", "path to file to insert as a header in wire_gen.go")
 	f.StringVar(&cmd.prefixFileName, "output_file_prefix", "", "string to prepend to output file names.")
 	f.StringVar(&cmd.tags, "tags", "", "append build tags to the default wirebuild")
+	f.StringVar(&cmd.mode, "mod", "mod", "the build mode to use in the 'go run' command added to the generated header.")
 }
 
 func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -135,6 +137,7 @@ func (cmd *genCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 
 	opts.PrefixOutputFile = cmd.prefixFileName
 	opts.Tags = cmd.tags
+	opts.Mode = cmd.mode
 
 	outs, errs := wire.Generate(ctx, wd, os.Environ(), packages(f), opts)
 	if len(errs) > 0 {

@@ -88,7 +88,7 @@ func TestWire(t *testing.T) {
 				t.Fatal(err)
 			}
 			wd := filepath.Join(gopath, "src", "example.com")
-			gens, errs := Generate(ctx, wd, append(os.Environ(), "GOPATH="+gopath), []string{test.pkg}, &GenerateOptions{Header: test.header})
+			gens, errs := Generate(ctx, wd, append(os.Environ(), "GOPATH="+gopath), []string{test.pkg}, &GenerateOptions{Header: test.header, Mode: test.mode})
 			var gen GenerateResult
 			if len(gens) > 1 {
 				t.Fatalf("got %d generated files, want 0 or 1", len(gens))
@@ -427,6 +427,7 @@ type testCase struct {
 	name                 string
 	pkg                  string
 	header               []byte
+	mode                 string
 	goFiles              map[string][]byte
 	wantProgramOutput    []byte
 	wantWireOutput       []byte
@@ -470,6 +471,7 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 		return nil, fmt.Errorf("load test case %s: %v", name, err)
 	}
 	header, _ := ioutil.ReadFile(filepath.Join(root, "header"))
+	mode, _ := ioutil.ReadFile(filepath.Join(root, "mode"))
 	var wantProgramOutput []byte
 	var wantWireOutput []byte
 	wireErrb, err := ioutil.ReadFile(filepath.Join(root, "want", "wire_errs.txt"))
@@ -521,6 +523,7 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 		name:                 name,
 		pkg:                  string(bytes.TrimSpace(pkg)),
 		header:               header,
+		mode:                 string(bytes.TrimSpace(mode)),
 		goFiles:              goFiles,
 		wantWireOutput:       wantWireOutput,
 		wantProgramOutput:    wantProgramOutput,
