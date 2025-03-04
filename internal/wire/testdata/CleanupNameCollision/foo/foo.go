@@ -19,28 +19,28 @@ import (
 )
 
 func main() {
-	bar, cleanup := injectBar()
+	bar, cleanup := injectFooCleanup()
 	fmt.Println(*bar)
 	cleanup()
 	fmt.Println(*bar)
 }
 
-type Cleanup int
-type Bar int
+type Foo int
+type FooCleanup int
 
-func provideCleanup() (*Cleanup, func()) {
-	foo := new(Cleanup)
+func provideFoo() (*Foo, func()) {
+	foo := new(Foo)
 	*foo = 42
 	return foo, func() { *foo = 0 }
 }
 
-func provideBar(cleanup *Cleanup) (*Bar, func()) {
-	bar := new(Bar)
-	*bar = 77
-	return bar, func() {
-		if *cleanup == 0 {
-			panic("foo cleaned up before bar")
+func provideFooCleanup(foo *Foo) (*FooCleanup, func()) {
+	fooCleanup := new(FooCleanup)
+	*fooCleanup = 77
+	return fooCleanup, func() {
+		if *foo == 0 {
+			panic("foo cleaned up before foo cleanup")
 		}
-		*bar = 0
+		*fooCleanup = 0
 	}
 }

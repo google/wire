@@ -8,11 +8,11 @@ package main
 
 // Injectors from wire.go:
 
-func injectBar() (*Bar, func()) {
-	cleanup, cleanupCleanup := provideCleanup()
-	bar, barCleanup := provideBar(cleanup)
-	return bar, func() {
-		barCleanup()
-		cleanupCleanup()
+func injectFooCleanup() (*FooCleanup, func()) {
+	foo, fooCleanup := provideFoo()
+	mainFooCleanup, mainFooCleanupCleanup := provideFooCleanup(foo)
+	return mainFooCleanup, func() {
+		mainFooCleanupCleanup()
+		fooCleanup()
 	}
 }

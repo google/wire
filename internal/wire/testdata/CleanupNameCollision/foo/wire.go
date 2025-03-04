@@ -21,7 +21,7 @@ import (
 	"github.com/google/wire"
 )
 
-func injectBar() (*Bar, func()) {
-	wire.Build(provideCleanup, provideBar)
+func injectFooCleanup() (*FooCleanup, func()) {
+	wire.Build(provideFoo, provideFooCleanup)
 	return nil, nil
 }
