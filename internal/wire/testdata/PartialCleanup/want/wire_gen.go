@@ -9,20 +9,20 @@ package main
 // Injectors from wire.go:
 
 func injectBaz() (Baz, func(), error) {
-	foo, cleanup := provideFoo()
-	bar, cleanup2, err := provideBar(foo)
+	foo, fooCleanup := provideFoo()
+	bar, barCleanup, err := provideBar(foo)
 	if err != nil {
-		cleanup()
+		fooCleanup()
 		return 0, nil, err
 	}
 	baz, err := provideBaz(bar)
 	if err != nil {
-		cleanup2()
-		cleanup()
+		barCleanup()
+		fooCleanup()
 		return 0, nil, err
 	}
 	return baz, func() {
-		cleanup2()
-		cleanup()
+		barCleanup()
+		fooCleanup()
 	}, nil
 }

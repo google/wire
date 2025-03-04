@@ -673,7 +673,7 @@ func (ig *injectorGen) funcProviderCall(lname string, c *call, injectSig outputS
 	ig.p("\t%s", lname)
 	prevCleanup := len(ig.cleanupNames)
 	if c.hasCleanup {
-		cname := disambiguate("cleanup", ig.nameInInjector)
+		cname := disambiguate(lname+"Cleanup", ig.nameInInjector)
 		ig.cleanupNames = append(ig.cleanupNames, cname)
 		ig.p(", %s", cname)
 	}

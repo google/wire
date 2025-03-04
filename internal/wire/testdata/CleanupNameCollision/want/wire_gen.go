@@ -9,10 +9,10 @@ package main
 // Injectors from wire.go:
 
 func injectBar() (*Bar, func()) {
-	foo, fooCleanup := provideFoo()
-	bar, barCleanup := provideBar(foo)
+	cleanup, cleanupCleanup := provideCleanup()
+	bar, barCleanup := provideBar(cleanup)
 	return bar, func() {
 		barCleanup()
-		fooCleanup()
+		cleanupCleanup()
 	}
 }
