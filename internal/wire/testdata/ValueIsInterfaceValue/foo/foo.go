@@ -22,6 +22,6 @@ import (
 
 func main() {
 	r := injectedReader(strings.NewReader("hello world"))
-	buf, _ := io.ReadAll(r) // ioutil.ReadAll --> io.ReadAll
+	buf, _ := io.ReadAll(r) 
 	fmt.Println(string(buf))
 }
