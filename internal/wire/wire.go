@@ -814,6 +814,7 @@ func typeVariableName(t types.Type, defaultName string, transform func(string) s
 	if p, ok := t.(*types.Pointer); ok {
 		t = p.Elem()
 	}
+	t = types.Unalias(t) // fix type alias (t is *types.Alias), e.g., type MyInt = int
 	var names []string
 	switch t := t.(type) {
 	case *types.Basic:
