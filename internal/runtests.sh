@@ -21,19 +21,10 @@ if [[ $# -gt 0 ]]; then
   exit 64
 fi
 
-# Run Go tests. Only do coverage for the Linux build
-# because it is slow, and codecov will only save the last one anyway.
+# Run Go tests.
 result=0
-if [[ "${RUNNER_OS:-}" == "Linux" ]]; then
-  echo "Running Go tests (with coverage)..."
-  go test -mod=readonly -race -coverpkg=./... -coverprofile=coverage.out ./... || result=1
-  if [ -f coverage.out ] && [ $result -eq 0 ]; then
-    bash <(curl -s https://codecov.io/bash)
-  fi
-else
-  echo "Running Go tests..."
-  go test -mod=readonly -race ./... || result=1
-fi
+echo "Running Go tests..."
+go test -mod=readonly -race ./... || result=1
 
 # No need to run other checks on OSs other than linux.
 # We default RUNNER_OS to "Linux" so that we don't abort here when run locally.
