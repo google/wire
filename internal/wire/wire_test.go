@@ -476,7 +476,10 @@ func loadTestCase(root string, wireGoSrc []byte) (*testCase, error) {
 	wantWireError := err == nil
 	var wantWireErrorStrings []string
 	if wantWireError {
-		wantWireErrorStrings = strings.Split(string(wireErrb), "\n\n")
+		for _, errs := range strings.Split(string(wireErrb), "\n\n") {
+			// Allow for trailing newlines, which can be hard to remove in some editors.
+			wantWireErrorStrings = append(wantWireErrorStrings, strings.TrimRight(errs, "\n\r"))
+		}
 	} else {
 		if !*record {
 			wantWireOutput, err = ioutil.ReadFile(filepath.Join(root, "want", "wire_gen.go"))
