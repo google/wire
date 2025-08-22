@@ -59,6 +59,10 @@ func NewSet(...interface{}) ProviderSet {
 	return ProviderSet{}
 }
 
+func Subtract(...interface{}) ProviderSet {
+	return ProviderSet{}
+}
+
 // Build is placed in the body of an injector function template to declare the
 // providers to use. The Wire code generation tool will fill in an
 // implementation of the function. The arguments to Build are interpreted the
