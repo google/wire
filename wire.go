@@ -114,6 +114,40 @@ func Bind(iface, to interface{}) Binding {
 	return Binding{}
 }
 
+// An AutoBinding makes a concrete type available to be bound to any interfaces it implements.
+type AutoBinding struct{}
+
+// AutoBind declares that a concrete type should be used to satisfy any dependencies on interfaces
+// that it implements. typ must be a pointer to a concrete type.
+//
+// Example:
+//
+//  type Fooer interface {
+//      Foo()
+//  }
+//
+//  type Barer interface {
+//      Bar()
+//  }
+//
+//  type MyFooBar struct{}
+//
+//  func (MyFooBar) Foo() {}
+//  func (MyFooBar) Bar() {}
+//
+//  func useFoo(foo Fooer) error {}
+//  func useBar(bar Barer) error {}
+//
+//  var MySet = wire.NewSet(
+//      wire.Struct(new(MyFooBar)),
+//      wire.AutoBind(new(MyFooBar)),
+//      useFoo, // *FooBar is injected
+//      useBar, // *Foobar is injected
+//  )
+func AutoBind(typ interface{}) AutoBinding {
+	return AutoBinding{}
+}
+
 // bindToUsePointer is detected by the wire tool to indicate that Bind's second argument should take a pointer.
 // See https://github.com/google/wire/issues/120 for details.
 const bindToUsePointer = true
