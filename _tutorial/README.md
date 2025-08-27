@@ -184,7 +184,7 @@ func InitializeEvent() Event {
 }
 ```
 
-It looks just like what we wrote above! Now this is a simple example with just
+It looks just like what we wrote above! You can try running the code using `go run main.go wire_gen.go` to verify that the code works. Now this is a simple example with just
 three components, so writing the initializer by hand isn't too painful. Imagine
 how useful Wire is for components that are much more complex. When working with
 Wire, we will commit both `wire.go` and `wire_gen.go` to source control.
