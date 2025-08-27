@@ -364,6 +364,19 @@ func (g *gen) inject(pos token.Pos, name string, sig *types.Signature, set *Prov
 					typeInfo: c.valueTypeInfo,
 				})
 			}
+		} else if c.kind == rawValueExpr {
+			if err := accessibleFrom(c.valueTypeInfo, c.valueExpr, g.pkg.PkgPath); err != nil {
+				// TODO(light): Display line number of value expression.
+				ts := types.TypeString(c.out, nil)
+				ec.add(notePosition(
+					g.pkg.Fset.Position(pos),
+					fmt.Errorf("inject %s: value %s can't be used: %v", name, ts, err)))
+			}
+			if g.values[c.valueExpr] == "" {
+				var printValue strings.Builder
+				printer.Fprint(&printValue, g.pkg.Fset, g.rewritePkgRefs(c.valueTypeInfo, c.valueExpr))
+				g.values[c.valueExpr] = printValue.String()
+			}
 		}
 	}
 	if len(ec.errors) > 0 {
@@ -644,6 +657,8 @@ func injectPass(name string, sig *types.Signature, calls []call, set *ProviderSe
 		case funcProviderCall:
 			ig.funcProviderCall(lname, c, injectSig)
 		case valueExpr:
+			ig.valueExpr(lname, c)
+		case rawValueExpr:
 			ig.valueExpr(lname, c)
 		case selectorExpr:
 			ig.fieldExpr(lname, c)

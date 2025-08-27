@@ -143,6 +143,10 @@ func InterfaceValue(typ interface{}, x interface{}) ProvidedValue {
 	return ProvidedValue{}
 }
 
+func RawValue(interface{}) ProvidedValue {
+	return ProvidedValue{}
+}
+
 // A StructProvider represents a named struct.
 type StructProvider struct{}
 
